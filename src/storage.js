@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const archiver = require('archiver');
 const { vaultFilesRoot, vaultRoot } = require('./vaults');
 
 /*
@@ -211,6 +212,29 @@ function purgeTrash(vaultId, trashId) {
   return true;
 }
 
+/** Purge all items in trash. */
+function purgeAllTrash(vaultId) {
+  const idxPath = trashIndexPath(vaultId);
+  const entries = loadIndex(idxPath);
+  for (const entry of entries) {
+    const f = path.join(trashDir(vaultId), entry.id);
+    if (fs.existsSync(f)) fs.unlinkSync(f);
+  }
+  saveIndex(idxPath, []);
+  return entries.length;
+}
+
+/** Read content of a trashed file for preview. */
+function readTrashVersion(vaultId, trashId) {
+  const idxPath = trashIndexPath(vaultId);
+  const entries = loadIndex(idxPath);
+  const entry = entries.find((e) => e.id === trashId);
+  if (!entry) return null;
+  const trashFull = path.join(trashDir(vaultId), trashId);
+  if (!fs.existsSync(trashFull)) return null;
+  return { entry, buffer: fs.readFileSync(trashFull) };
+}
+
 // -------------------------------- write / delete ----------------------------------
 
 /**
@@ -275,6 +299,106 @@ function deleteFile(vaultId, relPath) {
   return true;
 }
 
+// ------------------------------ search & stats -----------------------------------
+
+/** Search filename and content inside vault. */
+function searchVault(vaultId, query, limit = 50) {
+  if (!query || !query.trim()) return [];
+  const q = query.trim().toLowerCase();
+  const manifest = getManifest(vaultId);
+  const paths = Object.keys(manifest).sort();
+  const results = [];
+
+  for (const relPath of paths) {
+    if (results.length >= limit) break;
+    const meta = manifest[relPath];
+    const pathLower = relPath.toLowerCase();
+    const isPathMatch = pathLower.includes(q);
+
+    // If it's a text/markdown file, search contents too
+    const isText = /\.(md|txt|json|js|ts|css|html|yaml|yml|csv|canvas)$/i.test(relPath);
+    let snippet = '';
+    let matchesCount = 0;
+
+    if (isText) {
+      const buf = readFile(vaultId, relPath);
+      if (buf) {
+        const text = buf.toString('utf8');
+        const lowerText = text.toLowerCase();
+        let idx = lowerText.indexOf(q);
+        while (idx !== -1 && matchesCount < 5) {
+          matchesCount++;
+          if (!snippet) {
+            const start = Math.max(0, idx - 40);
+            const end = Math.min(text.length, idx + q.length + 60);
+            snippet = (start > 0 ? '…' : '') + text.slice(start, end).replace(/[\r\n]+/g, ' ') + (end < text.length ? '…' : '');
+          }
+          idx = lowerText.indexOf(q, idx + q.length);
+        }
+      }
+    }
+
+    if (isPathMatch || matchesCount > 0) {
+      results.push({
+        path: relPath,
+        size: meta.size,
+        mtime: meta.mtime,
+        isPathMatch,
+        matchesCount,
+        snippet,
+      });
+    }
+  }
+
+  return results;
+}
+
+/** Vault statistics summary. */
+function getVaultStats(vaultId) {
+  const manifest = getManifest(vaultId);
+  const paths = Object.keys(manifest);
+  let totalBytes = 0;
+  let notesCount = 0;
+  let attachmentsCount = 0;
+  let configsCount = 0;
+
+  for (const p of paths) {
+    const meta = manifest[p];
+    totalBytes += meta.size;
+    if (p.toLowerCase().endsWith('.md')) {
+      notesCount++;
+    } else if (p.startsWith('.obsidian/')) {
+      configsCount++;
+    } else {
+      attachmentsCount++;
+    }
+  }
+
+  const trashEntries = loadIndex(trashIndexPath(vaultId));
+  const historyEntries = loadIndex(historyIndexPath(vaultId));
+
+  return {
+    totalFiles: paths.length,
+    notesCount,
+    attachmentsCount,
+    configsCount,
+    totalBytes,
+    trashCount: trashEntries.length,
+    historyCount: historyEntries.length,
+  };
+}
+
+/** Stream a ZIP archive of all files in vault's files/ folder. */
+function exportVaultZip(vaultId, outputStream) {
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.pipe(outputStream);
+  const root = vaultFilesRoot(vaultId);
+  if (fs.existsSync(root)) {
+    archive.directory(root, false);
+  }
+  return archive.finalize();
+}
+
 module.exports = {
   getManifest,
   readFile,
@@ -285,6 +409,11 @@ module.exports = {
   listHistory,
   readHistoryVersion,
   listTrash,
+  readTrashVersion,
   restoreFromTrash,
   purgeTrash,
+  purgeAllTrash,
+  searchVault,
+  getVaultStats,
+  exportVaultZip,
 };

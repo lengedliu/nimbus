@@ -4,6 +4,7 @@ const { verifyToken } = require('./auth');
 const users = require('./users');
 const vaults = require('./vaults');
 const storage = require('./storage');
+const syncRules = require('./syncRules');
 
 /**
  * FNS realtime hub.
@@ -26,8 +27,10 @@ const storage = require('./storage');
  */
 class FnsHub {
   constructor() {
-    // vaultId -> Set of { ws, userId }
+    // vaultId -> Set of { ws, userId, deviceId, connectedAt }
     this.rooms = new Map();
+    // vaultId -> Array of { type: 'change'|'delete'|'conflict', path, timestamp, userId }
+    this.activityLogs = new Map();
   }
 
   init(httpServer) {
@@ -51,7 +54,7 @@ class FnsHub {
       }
 
       this.wss.handleUpgrade(req, socket, head, (ws) => {
-        this._onConnection(ws, user, vaultId);
+        this._onConnection(ws, user, vaultId, query.deviceId || 'Obsidian Client');
       });
     });
   }
@@ -61,8 +64,23 @@ class FnsHub {
     return this.rooms.get(vaultId);
   }
 
-  _onConnection(ws, user, vaultId) {
-    const client = { ws, userId: user.id };
+  _logActivity(vaultId, item) {
+    if (!this.activityLogs.has(vaultId)) this.activityLogs.set(vaultId, []);
+    const list = this.activityLogs.get(vaultId);
+    list.unshift({ ...item, timestamp: Date.now() });
+    if (list.length > 50) list.pop();
+  }
+
+  getActivityLogs(vaultId) {
+    return this.activityLogs.get(vaultId) || [];
+  }
+
+  getClientCount(vaultId) {
+    return this.rooms.get(vaultId)?.size || 0;
+  }
+
+  _onConnection(ws, user, vaultId, deviceName) {
+    const client = { ws, userId: user.id, deviceName, connectedAt: Date.now() };
     this._room(vaultId).add(client);
 
     this._send(ws, { type: 'init', manifest: storage.getManifest(vaultId) });
@@ -101,6 +119,10 @@ class FnsHub {
       }
 
       if (msg.type === 'push') {
+        if (syncRules.isPathIgnored(vaultId, msg.path)) {
+          return this._send(client.ws, { type: 'ack', path: msg.path, ignored: true });
+        }
+
         const buffer = Buffer.from(msg.content, 'base64');
         const result = storage.writeFile(vaultId, msg.path, buffer, {
           mtime: msg.mtime,
@@ -108,6 +130,7 @@ class FnsHub {
         });
 
         if (!result.written && result.conflict) {
+          this._logActivity(vaultId, { type: 'conflict', path: msg.path, conflictPath: result.conflict, userId: client.userId });
           this._send(client.ws, {
             type: 'conflict',
             path: msg.path,
@@ -119,6 +142,7 @@ class FnsHub {
           return;
         }
 
+        this._logActivity(vaultId, { type: 'change', path: msg.path, userId: client.userId });
         this._send(client.ws, { type: 'ack', path: msg.path, hash: result.currentHash });
         this.broadcastFileChange(vaultId, msg.path, result, client.userId);
         return;
@@ -126,6 +150,7 @@ class FnsHub {
 
       if (msg.type === 'delete') {
         storage.deleteFile(vaultId, msg.path);
+        this._logActivity(vaultId, { type: 'delete', path: msg.path, userId: client.userId });
         this.broadcastFileDelete(vaultId, msg.path, client.userId);
         return;
       }
@@ -138,6 +163,7 @@ class FnsHub {
 
   /** Push a changed file to every OTHER connected client for this vault. */
   broadcastFileChange(vaultId, relPath, result, fromUserId, readFromDisk = false) {
+    this._logActivity(vaultId, { type: 'change', path: relPath, userId: fromUserId });
     const room = this.rooms.get(vaultId);
     if (!room || room.size === 0) return;
     const buf = storage.readFile(vaultId, relPath);
@@ -155,6 +181,7 @@ class FnsHub {
   }
 
   broadcastFileDelete(vaultId, relPath, fromUserId) {
+    this._logActivity(vaultId, { type: 'delete', path: relPath, userId: fromUserId });
     const room = this.rooms.get(vaultId);
     if (!room) return;
     for (const client of room) {

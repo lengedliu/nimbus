@@ -4,6 +4,10 @@ const { signToken } = require('../auth');
 
 const router = express.Router();
 
+router.get('/status', (req, res) => {
+  res.json({ hasUsers: users.hasAnyUser() });
+});
+
 // Registration is open only for the very first user (bootstrap admin).
 // After that, use `npm run create-user` on the server to add accounts.
 router.post('/register', (req, res) => {

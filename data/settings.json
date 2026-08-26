@@ -1,0 +1,24 @@
+{
+  "serverName": "Nimbus",
+  "publicUrl": "",
+  "wsHeartbeatInterval": 30,
+  "conflictStrategy": "conflict_copy",
+  "conflictSuffixFormat": ".conflict-YYYYMMDD-HHmmss",
+  "maxFileSizeMb": 100,
+  "chunkSizeMb": 5,
+  "versionRetentionCount": 30,
+  "versionRetentionDays": 30,
+  "trashRetentionDays": 30,
+  "syncHiddenConfig": true,
+  "syncAttachments": true,
+  "autoPurgeTrash": false,
+  "defaultIgnorePatterns": [
+    ".obsidian/workspace.json",
+    ".obsidian/workspace-mobile.json",
+    "**/*.tmp",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/.git/**",
+    "**/.trash/**"
+  ]
+}

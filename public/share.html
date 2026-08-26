@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nimbus · 分享的笔记</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #19222c;
+      --border: #2a3744;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --primary: #58a6ff;
+      --primary-hover: #79b8ff;
+      --code-bg: #131b23;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f8fa;
+        --card: #ffffff;
+        --border: #d0d7de;
+        --text: #1f2328;
+        --muted: #656d76;
+        --primary: #0969da;
+        --primary-hover: #0550ae;
+        --code-bg: #f6f8fa;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.68;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    button {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    button:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .container {
+      max-width: 860px;
+      width: 100%;
+      margin: 32px auto;
+      padding: 0 20px 60px;
+      flex: 1;
+    }
+    .article-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+    @media (max-width: 640px) {
+      .article-card { padding: 20px; }
+      .container { margin: 16px auto; }
+    }
+    .note-meta {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .note-title {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 12px;
+    }
+    .meta-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .markdown-body {
+      font-size: 16px;
+      line-height: 1.75;
+      word-break: break-word;
+    }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+      margin-top: 1.5em;
+      margin-bottom: 0.6em;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .markdown-body h1 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .markdown-body h2 { font-size: 20px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .markdown-body h3 { font-size: 18px; }
+    .markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body table, .markdown-body pre, .markdown-body blockquote {
+      margin-bottom: 16px;
+    }
+    .markdown-body ul, .markdown-body ol { padding-left: 24px; }
+    .markdown-body li { margin-bottom: 4px; }
+    .markdown-body pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 13.5px;
+    }
+    .markdown-body code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 13.5px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    .markdown-body pre code {
+      border: none;
+      padding: 0;
+      background: transparent;
+    }
+    .markdown-body blockquote {
+      border-left: 4px solid var(--primary);
+      padding: 8px 16px;
+      color: var(--muted);
+      background: var(--code-bg);
+      border-radius: 0 6px 6px 0;
+    }
+    .markdown-body table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .markdown-body th, .markdown-body td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .markdown-body th { background: var(--code-bg); }
+    .markdown-body img {
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .markdown-body input[type="checkbox"] {
+      margin-right: 6px;
+    }
+    .password-card {
+      max-width: 420px;
+      margin: 80px auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      text-align: center;
+    }
+    .password-card input {
+      width: 100%;
+      padding: 10px 14px;
+      margin: 16px 0 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+    }
+    .password-card button {
+      width: 100%;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 10px;
+      justify-content: center;
+      font-weight: 500;
+    }
+    .password-card button:hover { background: var(--primary-hover); color: #fff; }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    .footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span>☁️</span>
+    <span>Nimbus Fast Note Share</span>
+  </div>
+  <div class="actions" id="top-actions" style="display:none;">
+    <button id="copy-btn">📋 复制正文</button>
+  </div>
+</header>
+
+<div class="container" id="main-container">
+  <div style="text-align:center;padding:60px;color:var(--muted)">加载中…</div>
+</div>
+
+<footer class="footer">
+  由 Nimbus 服务驱动
+</footer>
+
+<script>
+(function() {
+  const shareId = window.location.pathname.split('/').pop();
+  const container = document.getElementById('main-container');
+  const topActions = document.getElementById('top-actions');
+  let currentRawContent = '';
+
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+  }
+
+  async function loadShare(password = '') {
+    try {
+      const url = `/api/public/shares/${encodeURIComponent(shareId)}${password ? `?password=${encodeURIComponent(password)}` : ''}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (res.status === 401 && data.needsPassword) {
+        showPasswordForm(data.title);
+        return;
+      }
+      if (!res.ok) {
+        showError(data.error || '无法加载该分享');
+        return;
+      }
+
+      renderNote(data);
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  function showPasswordForm(title) {
+    container.innerHTML = `
+      <div class="password-card">
+        <div style="font-size:36px;margin-bottom:12px">🔒</div>
+        <h2 style="font-size:18px;margin-bottom:6px">${title || '受保护的笔记'}</h2>
+        <p style="color:var(--muted);font-size:13px">此分享已被设置密码保护，请输入访问密码：</p>
+        <form id="pwd-form">
+          <input type="password" id="share-pwd" placeholder="请输入密码" required autofocus />
+          <button type="submit">查看笔记</button>
+        </form>
+        <p id="pwd-err" style="color:#f85149;font-size:12px;margin-top:10px"></p>
+      </div>
+    `;
+    document.getElementById('pwd-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const pwd = document.getElementById('share-pwd').value;
+      loadShare(pwd);
+    });
+  }
+
+  function showError(msg) {
+    container.innerHTML = `
+      <div class="article-card" style="text-align:center;padding:60px 20px;">
+        <div style="font-size:40px;margin-bottom:16px">🏜️</div>
+        <h2 style="font-size:20px;margin-bottom:8px">页面无法访问</h2>
+        <p style="color:var(--muted);font-size:14px">${msg}</p>
+      </div>
+    `;
+  }
+
+  function renderNote(data) {
+    currentRawContent = data.content || '';
+    document.title = `${data.title} · Nimbus Note`;
+
+    const htmlContent = marked ? marked.parse(data.content) : data.content;
+    const dateStr = new Date(data.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const expiresStr = data.expiresAt ? ` · 有效期至 ${new Date(data.expiresAt).toLocaleDateString()}` : '';
+
+    container.innerHTML = `
+      <article class="article-card">
+        <div class="note-meta">
+          <h1 class="note-title">${escapeHtml(data.title)}</h1>
+          <div class="meta-tags">
+            <span>📅 ${dateStr}${expiresStr}</span>
+            <span>📄 ${escapeHtml(data.filePath)}</span>
+          </div>
+        </div>
+        <div class="markdown-body">
+          ${htmlContent}
+        </div>
+      </article>
+    `;
+
+    if (data.allowCopy) {
+      topActions.style.display = 'flex';
+      document.getElementById('copy-btn').onclick = () => {
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(currentRawContent).then(() => toast('笔记已复制到剪贴板'));
+        } else {
+          prompt('复制笔记内容：', currentRawContent);
+        }
+      };
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  loadShare();
+})();
+</script>
+</body>
+</html>

@@ -1,36 +1,55 @@
-<!doctype html>
-<html lang="zh">
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Nimbus 管理后台</title>
-<link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nimbus · Obsidian 高速实时同步服务</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>☁️</text></svg>">
 </head>
 <body>
 
-<div id="login-view" class="center-screen">
-  <form id="login-form" class="card">
-    <h1>Nimbus</h1>
-    <p class="subtitle">Obsidian 同步服务 · 管理后台</p>
-    <label>服务器地址
-      <input id="login-server" type="text" placeholder="留空则使用当前地址" />
+<div id="login-view" class="center-box">
+  <form id="login-form" class="card login-card">
+    <div class="brand">
+      <span class="logo">☁️</span>
+      <span class="brand-name">Nimbus</span>
+    </div>
+    <div class="subtitle">Obsidian 高速实时同步服务 · 管理后台</div>
+
+    <label>
+      <span>服务器地址</span>
+      <input type="text" id="login-server" placeholder="http://localhost:3000" />
     </label>
-    <label>用户名
-      <input id="login-username" type="text" required autocomplete="username" />
+    <label>
+      <span>用户名</span>
+      <input type="text" id="login-username" required autocomplete="username" />
     </label>
-    <label>密码
-      <input id="login-password" type="password" required autocomplete="current-password" />
+    <label>
+      <span>密码</span>
+      <input type="password" id="login-password" required autocomplete="current-password" />
     </label>
-    <button type="submit">登录</button>
-    <p id="login-error" class="error"></p>
+
+    <div id="login-error" class="error-msg"></div>
+    <button type="submit" class="primary">登录</button>
   </form>
 </div>
 
 <div id="app-view" class="app hidden">
   <header class="topbar">
-    <div class="brand">☁️ Nimbus</div>
+    <div class="brand">
+      <span class="logo">☁️</span>
+      <span class="brand-name">Nimbus</span>
+      <span class="brand-badge">Fast Sync</span>
+    </div>
+    <div class="topbar-center">
+      <div class="sync-indicator" id="hub-status-indicator" title="实时同步服务运行中">
+        <span class="status-dot"></span>
+        <span class="status-text" id="hub-status-text">同步服务就绪</span>
+      </div>
+    </div>
     <div class="who">
-      <span id="who-username"></span>
+      <span id="who-username" class="user-pill"></span>
       <span id="who-role" class="badge"></span>
       <button id="logout-btn" class="ghost">退出</button>
     </div>
@@ -38,23 +57,42 @@
 
   <div class="layout">
     <nav class="sidebar">
-      <div class="nav-section-title">我的 Vault</div>
+      <div class="sidebar-header">
+        <div class="nav-section-title">我的 Vaults</div>
+        <button id="new-vault-btn" class="btn-icon" title="新建 Vault">+</button>
+      </div>
       <ul id="vault-list" class="vault-list"></ul>
-      <button id="new-vault-btn" class="secondary block">+ 新建 Vault</button>
+
+      <div class="nav-section-title" style="margin-top:24px">快捷工具</div>
+      <ul class="nav-menu">
+        <li><button class="nav-item tab-btn" id="global-settings-btn" data-tab="settings">⚙️ 设置</button></li>
+        <li><button class="nav-item" id="global-connect-btn">⚡ Obsidian 连接指引</button></li>
+        <li><button class="nav-item" id="global-mcp-btn">🤖 AI / MCP 接口配置</button></li>
+      </ul>
 
       <div id="admin-nav" class="hidden">
-        <div class="nav-section-title" style="margin-top:24px">管理员</div>
-        <ul class="vault-list">
-          <li><button class="tab-btn" data-tab="users">用户管理</button></li>
-          <li><button class="tab-btn" data-tab="all-vaults">全部 Vault</button></li>
+        <div class="nav-section-title" style="margin-top:24px">系统管理</div>
+        <ul class="nav-menu">
+          <li><button class="tab-btn" data-tab="settings">⚙️ 设置</button></li>
+          <li><button class="tab-btn" data-tab="database">🗄️ 数据库管理</button></li>
+          <li><button class="tab-btn" data-tab="users">👥 用户管理</button></li>
+          <li><button class="tab-btn" data-tab="all-vaults">📚 全局 Vault</button></li>
         </ul>
       </div>
     </nav>
 
     <main class="main" id="main-panel">
-      <div class="empty-state">从左侧选择一个 vault，或选择管理员功能</div>
+      <div class="empty-state">
+        <div style="font-size:48px;margin-bottom:12px;">📓</div>
+        <p>从左侧选择一个 Vault 开始管理，或新建一个 Vault 进行 Obsidian 同步</p>
+      </div>
     </main>
   </div>
+</div>
+
+<!-- Modal Container for Connect / Share / Diff -->
+<div id="modal-backdrop" class="modal-backdrop hidden">
+  <div id="modal-container" class="modal-container"></div>
 </div>
 
 <script src="app.js"></script>

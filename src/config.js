@@ -4,7 +4,7 @@ const path = require('path');
 const DATA_DIR = path.resolve(process.cwd(), process.env.DATA_DIR || './data');
 
 module.exports = {
-  PORT: parseInt(process.env.PORT || '8787', 10),
+  PORT: parseInt(process.env.PORT || '3000', 10),
   JWT_SECRET: process.env.JWT_SECRET || 'dev-only-insecure-secret',
   TOKEN_TTL: process.env.TOKEN_TTL || '30d',
   DATA_DIR,

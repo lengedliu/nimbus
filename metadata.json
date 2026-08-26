@@ -1,0 +1,8 @@
+{
+  "name": "Nimbus",
+  "description": "Obsidian sync and management server with Web dashboard and MCP support",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
