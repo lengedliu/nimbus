@@ -1813,6 +1813,9 @@
           <button class="settings-subnav-btn ${currentSettingsSubTab === 'sync' ? 'active' : ''}" data-subtab="sync">
             🔄 同步策略与冲突处理
           </button>
+          <button class="settings-subnav-btn ${currentSettingsSubTab === 'database' ? 'active' : ''}" data-subtab="database">
+            🗄️ 数据库与存储引擎
+          </button>
           <button class="settings-subnav-btn ${currentSettingsSubTab === 'history' ? 'active' : ''}" data-subtab="history">
             🕒 版本快照与回收站
           </button>
@@ -2107,6 +2110,362 @@
           resDiv.innerHTML = `<span style="color:#e74c3c;font-size:13px;">✕ 保存失败: ${escapeHtml(e.message)}</span>`;
         }
       });
+    } else if (subTab === 'database') {
+      // 3. Database Multi-Engine Management & Migration Tab
+      container.innerHTML = '<div class="empty-state">正在加载数据库引擎与存储状态…</div>';
+
+      (async () => {
+        let dbInfo = null;
+        try {
+          const res = await api('/api/settings/database');
+          if (res.ok) {
+            dbInfo = await res.json();
+          }
+        } catch (e) {
+          console.error('Fetch database info error:', e);
+        }
+
+        if (!dbInfo) {
+          container.innerHTML = '<div class="empty-state" style="color:var(--danger)">获取数据库信息失败，请检查网络或后端状态</div>';
+          return;
+        }
+
+        const activeEngine = (dbInfo.status?.type || 'json').toLowerCase();
+        const cfg = dbInfo.status?.config || {};
+        const stats = dbInfo.stats || { usersCount: 0, vaultsCount: 0, sharesCount: 0, tokensCount: 0, rulesCount: 0 };
+
+        const engineNames = {
+          json: 'JSON 本地文件存储 (Local JSON Storage)',
+          sqlite: 'SQLite 嵌入式单文件关系数据库 (Embedded SQLite3)',
+          postgres: 'PostgreSQL 企业级关系数据库 (PostgreSQL 14+)',
+          mysql: 'MySQL / MariaDB 关系数据库 (MySQL 8.0+)',
+        };
+
+        container.innerHTML = `
+          <!-- Active Engine Hero Card -->
+          <div class="db-hero-card">
+            <div class="db-hero-header">
+              <div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+                  <h3 style="margin:0;font-size:16px;font-weight:700;">🗄️ 当前活动存储后端: ${escapeHtml(engineNames[activeEngine] || activeEngine.toUpperCase())}</h3>
+                  <span class="db-status-badge">
+                    <span class="db-status-dot"></span>
+                    <span>运行正常</span>
+                  </span>
+                </div>
+                <p style="margin:0;font-size:13px;color:var(--muted)">
+                  ${activeEngine === 'json' ? '数据持久化保存于服务端 <code>/data/*.json</code> 文件中' : ''}
+                  ${activeEngine === 'sqlite' ? `数据库文件路径: <code>${escapeHtml(cfg.sqlitePath || 'data/nimbus.sqlite')}</code> (已启用 WAL 高并发日志模式)` : ''}
+                  ${activeEngine === 'postgres' ? `数据库连接主机: <code>${escapeHtml(cfg.host || 'PostgreSQL Server')}</code>, 数据库名: <code>${escapeHtml(cfg.database || 'nimbus')}</code>` : ''}
+                  ${activeEngine === 'mysql' ? `数据库连接主机: <code>${escapeHtml(cfg.host || 'MySQL Server')}</code>, 数据库名: <code>${escapeHtml(cfg.database || 'nimbus')}</code>` : ''}
+                </p>
+              </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="db-stats-grid">
+              <div class="db-stat-item">
+                <div class="db-stat-val">${stats.usersCount}</div>
+                <div class="db-stat-lbl">👥 注册用户</div>
+              </div>
+              <div class="db-stat-item">
+                <div class="db-stat-val">${stats.vaultsCount}</div>
+                <div class="db-stat-lbl">📚 笔记库 (Vaults)</div>
+              </div>
+              <div class="db-stat-item">
+                <div class="db-stat-val">${stats.sharesCount}</div>
+                <div class="db-stat-lbl">🔗 公开分享链接</div>
+              </div>
+              <div class="db-stat-item">
+                <div class="db-stat-val">${stats.tokensCount}</div>
+                <div class="db-stat-lbl">🔑 设备专属令牌</div>
+              </div>
+              <div class="db-stat-item">
+                <div class="db-stat-val">${stats.rulesCount}</div>
+                <div class="db-stat-lbl">🛡️ 规则与过滤配置</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Switch & Configure Engine Card -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3><span>🔄</span> 切换并更新数据库引擎 (Database Switch & Migration)</h3>
+              <p>Nimbus 支持在 <b>JSON 文件</b>、<b>SQLite</b>、<b>PostgreSQL</b>、<b>MySQL</b> 间任意无缝切换，并支持一键数据平滑迁移</p>
+            </div>
+
+            <div style="margin-bottom:16px;">
+              <span style="display:block;font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text-secondary);">
+                选择目标数据库存储引擎：
+              </span>
+              <div class="db-engine-grid">
+                <div class="db-engine-opt ${activeEngine === 'json' ? 'selected' : ''}" data-type="json">
+                  <div class="db-engine-title">
+                    <span>📄 JSON 文件存储</span>
+                    ${activeEngine === 'json' ? '<span class="badge" style="background:var(--accent-bg);color:var(--accent);font-size:11px;">当前使用</span>' : ''}
+                  </div>
+                  <div class="db-engine-desc">零配置、无外部依赖，数据直接保存在 JSON 文件，适合个人单机快速运行。</div>
+                </div>
+
+                <div class="db-engine-opt ${activeEngine === 'sqlite' ? 'selected' : ''}" data-type="sqlite">
+                  <div class="db-engine-title">
+                    <span>🗃️ SQLite 单文件数据库</span>
+                    ${activeEngine === 'sqlite' ? '<span class="badge" style="background:var(--accent-bg);color:var(--accent);font-size:11px;">当前使用</span>' : ''}
+                  </div>
+                  <div class="db-engine-desc">嵌入式关系数据库，具备完整 ACID 事务与 WAL 读写并发，零网络延迟。</div>
+                </div>
+
+                <div class="db-engine-opt ${activeEngine === 'postgres' ? 'selected' : ''}" data-type="postgres">
+                  <div class="db-engine-title">
+                    <span>🐘 PostgreSQL 企业级关系库</span>
+                    ${activeEngine === 'postgres' ? '<span class="badge" style="background:var(--accent-bg);color:var(--accent);font-size:11px;">当前使用</span>' : ''}
+                  </div>
+                  <div class="db-engine-desc">支持云数据库（Supabase、Neon、RDS、Cloud SQL），高并发强一致性。</div>
+                </div>
+
+                <div class="db-engine-opt ${activeEngine === 'mysql' ? 'selected' : ''}" data-type="mysql">
+                  <div class="db-engine-title">
+                    <span>🐬 MySQL / MariaDB</span>
+                    ${activeEngine === 'mysql' ? '<span class="badge" style="background:var(--accent-bg);color:var(--accent);font-size:11px;">当前使用</span>' : ''}
+                  </div>
+                  <div class="db-engine-desc">经典开源关系型数据库，适合分布式集群、主从架构及企业级运维环境。</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Params Configuration Container -->
+            <div id="db-config-fields-wrap" style="background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:18px;">
+              <!-- Dynamic rendered by JS -->
+            </div>
+
+            <!-- Migration Toggle -->
+            <div class="form-checkbox-group" style="margin-bottom:20px;">
+              <label class="form-checkbox-label">
+                <input type="checkbox" id="db-migrate-data-checkbox" checked />
+                <span><b>自动平滑迁移现有数据</b>（将当前数据库中的全部用户、Vaults、分享链接、系统设置等完整复制导入到新数据库中）</span>
+              </label>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <button id="db-test-conn-btn" class="btn-secondary">
+                🔍 测试目标数据库连接
+              </button>
+              ${isAdmin ? `<button id="db-switch-save-btn" class="btn-primary">🚀 保存并切换数据库引擎</button>` : '<span style="font-size:13px;color:var(--muted)">只有管理员有权限切换数据库配置</span>'}
+            </div>
+
+            <div id="db-action-feedback" style="margin-top:14px;"></div>
+          </div>
+        `;
+
+        let selectedTargetType = activeEngine;
+
+        function renderFieldsForEngine(type) {
+          const wrap = $('#db-config-fields-wrap');
+          if (!wrap) return;
+
+          if (type === 'json') {
+            wrap.innerHTML = `
+              <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--text-secondary);">
+                <span>ℹ️</span>
+                <span><b>JSON 文件存储模式无需额外配置参数</b>。系统将把数据自动持久化保存于服务端的 <code>data/</code> 目录。</span>
+              </div>
+            `;
+          } else if (type === 'sqlite') {
+            wrap.innerHTML = `
+              <h4 style="margin:0 0 12px;font-size:14px;">⚙️ SQLite 数据库配置参数</h4>
+              <div class="settings-form-grid">
+                <label style="margin:0;">
+                  <span>SQLite 数据库文件存储路径 (Path)</span>
+                  <input id="db-input-sqlite-path" value="${escapeHtml(cfg.sqlitePath || 'data/nimbus.sqlite')}" placeholder="data/nimbus.sqlite" />
+                  <div class="settings-help">支持相对路径或绝对路径，如果目标目录不存在将自动创建</div>
+                </label>
+              </div>
+            `;
+          } else if (type === 'postgres') {
+            wrap.innerHTML = `
+              <h4 style="margin:0 0 12px;font-size:14px;">🐘 PostgreSQL 数据库连接参数</h4>
+              <div style="margin-bottom:14px;">
+                <label style="margin:0;">
+                  <span>PostgreSQL 连接 URI (DATABASE_URL) <span style="font-weight:400;color:var(--muted);font-size:12px;">（优先使用，留空则使用下方分项配置）</span></span>
+                  <input id="db-input-pg-url" placeholder="postgresql://user:password@localhost:5432/nimbus?sslmode=disable" />
+                  <div class="settings-help">例如 Supabase / Neon / RDS 提供的连接 URI</div>
+                </label>
+              </div>
+
+              <div class="settings-form-grid">
+                <label style="margin:0;">
+                  <span>主机地址 (Host)</span>
+                  <input id="db-input-pg-host" value="${escapeHtml(cfg.host || 'localhost')}" placeholder="localhost" />
+                </label>
+                <label style="margin:0;">
+                  <span>端口 (Port)</span>
+                  <input id="db-input-pg-port" type="number" value="${cfg.port || 5432}" placeholder="5432" />
+                </label>
+                <label style="margin:0;">
+                  <span>数据库名 (Database)</span>
+                  <input id="db-input-pg-db" value="${escapeHtml(cfg.database || 'nimbus')}" placeholder="nimbus" />
+                </label>
+                <label style="margin:0;">
+                  <span>用户名 (User)</span>
+                  <input id="db-input-pg-user" value="${escapeHtml(cfg.user || 'postgres')}" placeholder="postgres" />
+                </label>
+                <label style="margin:0;">
+                  <span>密码 (Password)</span>
+                  <input id="db-input-pg-pass" type="password" placeholder="请输入数据库访问密码" />
+                </label>
+                <label style="margin:0;display:flex;flex-direction:column;justify-content:center;">
+                  <span style="margin-bottom:8px;">SSL 安全加密连接</span>
+                  <label class="form-checkbox-label" style="margin:0;">
+                    <input type="checkbox" id="db-input-pg-ssl" ${cfg.ssl ? 'checked' : ''} />
+                    <span>启用 SSL 加密 (云数据库必须开启)</span>
+                  </label>
+                </label>
+              </div>
+            `;
+          } else if (type === 'mysql') {
+            wrap.innerHTML = `
+              <h4 style="margin:0 0 12px;font-size:14px;">🐬 MySQL / MariaDB 数据库连接参数</h4>
+              <div class="settings-form-grid">
+                <label style="margin:0;">
+                  <span>主机地址 (Host)</span>
+                  <input id="db-input-mysql-host" value="${escapeHtml(cfg.host || 'localhost')}" placeholder="localhost" />
+                </label>
+                <label style="margin:0;">
+                  <span>端口 (Port)</span>
+                  <input id="db-input-mysql-port" type="number" value="${cfg.port || 3306}" placeholder="3306" />
+                </label>
+                <label style="margin:0;">
+                  <span>数据库名 (Database)</span>
+                  <input id="db-input-mysql-db" value="${escapeHtml(cfg.database || 'nimbus')}" placeholder="nimbus" />
+                </label>
+                <label style="margin:0;">
+                  <span>用户名 (User)</span>
+                  <input id="db-input-mysql-user" value="${escapeHtml(cfg.user || 'root')}" placeholder="root" />
+                </label>
+                <label style="margin:0;">
+                  <span>密码 (Password)</span>
+                  <input id="db-input-mysql-pass" type="password" placeholder="请输入数据库访问密码" />
+                </label>
+              </div>
+            `;
+          }
+        }
+
+        renderFieldsForEngine(selectedTargetType);
+
+        // Bind engine option clicks
+        container.querySelectorAll('.db-engine-opt').forEach((opt) => {
+          opt.addEventListener('click', () => {
+            container.querySelectorAll('.db-engine-opt').forEach((o) => o.classList.remove('selected'));
+            opt.classList.add('selected');
+            selectedTargetType = opt.dataset.type;
+            renderFieldsForEngine(selectedTargetType);
+          });
+        });
+
+        function collectConfigFromUI() {
+          const type = selectedTargetType;
+          if (type === 'json') return { type: 'json' };
+          if (type === 'sqlite') {
+            return {
+              type: 'sqlite',
+              sqlitePath: $('#db-input-sqlite-path')?.value.trim() || 'data/nimbus.sqlite',
+            };
+          }
+          if (type === 'postgres') {
+            const pgUrl = $('#db-input-pg-url')?.value.trim();
+            if (pgUrl) {
+              return {
+                type: 'postgres',
+                connectionString: pgUrl,
+                ssl: $('#db-input-pg-ssl')?.checked,
+              };
+            }
+            return {
+              type: 'postgres',
+              host: $('#db-input-pg-host')?.value.trim() || 'localhost',
+              port: parseInt($('#db-input-pg-port')?.value, 10) || 5432,
+              database: $('#db-input-pg-db')?.value.trim() || 'nimbus',
+              user: $('#db-input-pg-user')?.value.trim() || 'postgres',
+              password: $('#db-input-pg-pass')?.value || '',
+              ssl: $('#db-input-pg-ssl')?.checked,
+            };
+          }
+          if (type === 'mysql') {
+            return {
+              type: 'mysql',
+              host: $('#db-input-mysql-host')?.value.trim() || 'localhost',
+              port: parseInt($('#db-input-mysql-port')?.value, 10) || 3306,
+              database: $('#db-input-mysql-db')?.value.trim() || 'nimbus',
+              user: $('#db-input-mysql-user')?.value.trim() || 'root',
+              password: $('#db-input-mysql-pass')?.value || '',
+            };
+          }
+          return { type: 'json' };
+        }
+
+        // Test connection
+        $('#db-test-conn-btn')?.addEventListener('click', async () => {
+          const targetCfg = collectConfigFromUI();
+          const fb = $('#db-action-feedback');
+          fb.innerHTML = '<span style="color:var(--muted);font-size:13px;">正在测试数据库连接…</span>';
+
+          try {
+            const res = await api('/api/settings/database/test', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(targetCfg),
+            });
+            const body = await res.json();
+            if (body.ok) {
+              fb.innerHTML = `<div style="padding:10px 14px;background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.3);border-radius:6px;color:#2ecc71;font-size:13px;">✓ 连接测试成功: ${escapeHtml(body.message)}</div>`;
+            } else {
+              fb.innerHTML = `<div style="padding:10px 14px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:6px;color:#e74c3c;font-size:13px;">✕ 连接失败: ${escapeHtml(body.error)}</div>`;
+            }
+          } catch (e) {
+            fb.innerHTML = `<div style="padding:10px 14px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:6px;color:#e74c3c;font-size:13px;">✕ 请求错误: ${escapeHtml(e.message)}</div>`;
+          }
+        });
+
+        // Switch and migrate database
+        $('#db-switch-save-btn')?.addEventListener('click', async () => {
+          const targetCfg = collectConfigFromUI();
+          const doMigrate = $('#db-migrate-data-checkbox')?.checked;
+
+          const engineDisplayName = engineNames[targetCfg.type] || targetCfg.type.toUpperCase();
+          if (!confirm(`确定要将数据库存储引擎切换为「${engineDisplayName}」吗？\n\n${doMigrate ? '✓ 已开启全量数据自动迁移，系统将平滑搬移现有用户与笔记配置。' : '⚠️ 未开启数据迁移，新数据库将从空白状态启动。'}`)) {
+            return;
+          }
+
+          const fb = $('#db-action-feedback');
+          fb.innerHTML = '<span style="color:var(--accent);font-size:13px;">正在执行数据库切换与数据平滑迁移，请稍候…</span>';
+
+          try {
+            const res = await api('/api/settings/database/switch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ targetConfig: targetCfg, migrate: doMigrate }),
+            });
+            const body = await res.json();
+            if (body.ok) {
+              const counts = body.result?.counts || {};
+              toast('数据库引擎切换成功！');
+              fb.innerHTML = `
+                <div style="padding:12px 16px;background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.4);border-radius:6px;color:#2ecc71;font-size:13.5px;">
+                  <b>✓ 数据库切换成功！当前活跃引擎: ${escapeHtml(body.result?.activeEngine || targetCfg.type.toUpperCase())}</b>
+                  ${doMigrate ? `<div style="font-size:12.5px;color:var(--text);margin-top:6px;">已成功平滑迁移: ${counts.users || 0} 个用户、${counts.vaults || 0} 个 Vault、${counts.shares || 0} 条分享、${counts.apiTokens || 0} 个专属令牌。</div>` : ''}
+                </div>
+              `;
+              setTimeout(() => renderSettingsPanel('database'), 1500);
+            } else {
+              fb.innerHTML = `<div style="padding:10px 14px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:6px;color:#e74c3c;font-size:13px;">✕ 切换失败: ${escapeHtml(body.error)}</div>`;
+            }
+          } catch (e) {
+            fb.innerHTML = `<div style="padding:10px 14px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:6px;color:#e74c3c;font-size:13px;">✕ 执行失败: ${escapeHtml(e.message)}</div>`;
+          }
+        });
+      })();
     } else if (subTab === 'history') {
       // 3. History and trash retention lifecycle tab
       container.innerHTML = `

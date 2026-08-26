@@ -235,7 +235,7 @@ Nimbus 最初参考了 [haierkeys/fast-note-sync-service](https://github.com/hai
 | 笔记分享 | ❌ | ✅ 带密码/统计/短链 |
 | Git 自动化推送 | ❌ | ✅ |
 | 多存储后端（S3/OSS/WebDAV等） | ❌ | ✅ |
-| 数据库 | JSON 文件（个人/小规模够用） | SQLite/MySQL/PostgreSQL |
+| 数据库 | SQLite/MySQL/PostgreSQL/JSON（支持平滑迁移） | SQLite/MySQL/PostgreSQL |
 | 语言/体量 | Node.js，单文件路由，代码量小、好改 | Go，功能更全，代码量也大得多 |
 
 ### 为什么有些没做
@@ -248,8 +248,7 @@ Nimbus 最初参考了 [haierkeys/fast-note-sync-service](https://github.com/hai
   会比较吃内存/带宽，这个是分片传输真正有价值的场景。
 - **笔记分享、Git 自动化、多存储后端**：这几个是独立的大功能模块，不是"顺手加一下"的
   体量，值得单开一次来做，而不是这次顺带糊一个简化版。
-- **多数据库支持**：当前用 JSON 文件存元数据，个人/小团队用没问题；真要支持多用户高
-  并发场景，换 SQLite 会是更值当的第一步（比直接上 MySQL/Postgres 轻量）。
+- **多数据库支持**：现已原生支持 **SQLite / MySQL / PostgreSQL / JSON 文件** 多引擎支持，并支持在 Web 管理后台（⚙️ 设置 -> 数据库与存储引擎）中进行一键连通性测试与全量数据平滑迁移。
 
 这几个如果你要哪个，告诉我优先级，下次接着做。
 

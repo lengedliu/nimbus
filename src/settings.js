@@ -243,4 +243,5 @@ module.exports = {
   revokeToken,
   generatePluginConfig,
   loadFromDb,
+  getAllTokens: () => cachedTokens,
 };

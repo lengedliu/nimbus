@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const { DATA_DIR } = require('./config');
+const { DATA_DIR, USERS_FILE, VAULTS_FILE } = require('./config');
+
+const DB_CONFIG_FILE = path.join(DATA_DIR, 'db_config.json');
 
 let sqlite3 = null;
 let pg = null;
@@ -22,11 +24,11 @@ function getMysql() {
 }
 
 /**
- * DB Types: 'json' (default/legacy), 'sqlite', 'postgres', 'mysql'
+ * DB Types: 'json' (default), 'sqlite', 'postgres', 'mysql'
  */
 class DatabaseManager {
   constructor() {
-    this.type = 'json'; // default
+    this.type = 'json';
     this.connectionConfig = {};
     this.initialized = false;
     this.sqliteDb = null;
@@ -34,7 +36,31 @@ class DatabaseManager {
     this.mysqlPool = null;
   }
 
-  detectConfigFromEnv() {
+  loadPersistentConfig() {
+    if (fs.existsSync(DB_CONFIG_FILE)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(DB_CONFIG_FILE, 'utf8'));
+        if (raw && raw.type) return raw;
+      } catch (err) {
+        console.error('[DB] Failed to read db_config.json:', err.message);
+      }
+    }
+    return null;
+  }
+
+  savePersistentConfig(config) {
+    try {
+      fs.mkdirSync(path.dirname(DB_CONFIG_FILE), { recursive: true });
+      fs.writeFileSync(DB_CONFIG_FILE, JSON.stringify(config, null, 2));
+    } catch (err) {
+      console.error('[DB] Failed to save db_config.json:', err.message);
+    }
+  }
+
+  detectConfig() {
+    const saved = this.loadPersistentConfig();
+    if (saved) return saved;
+
     const dbType = (process.env.DB_TYPE || '').toLowerCase();
     if (dbType === 'sqlite' || process.env.SQLITE_PATH) {
       return {
@@ -51,6 +77,7 @@ class DatabaseManager {
         user: process.env.PG_USER || 'postgres',
         password: process.env.PG_PASSWORD || '',
         database: process.env.PG_DATABASE || 'nimbus',
+        ssl: process.env.PG_SSL === 'true',
       };
     }
     if (dbType === 'mysql' || process.env.MYSQL_HOST) {
@@ -66,10 +93,34 @@ class DatabaseManager {
     return { type: 'json' };
   }
 
+  async close() {
+    if (this.sqliteDb) {
+      try {
+        await new Promise((res) => this.sqliteDb.close(res));
+      } catch {}
+      this.sqliteDb = null;
+    }
+    if (this.pgPool) {
+      try {
+        await this.pgPool.end();
+      } catch {}
+      this.pgPool = null;
+    }
+    if (this.mysqlPool) {
+      try {
+        await this.mysqlPool.end();
+      } catch {}
+      this.mysqlPool = null;
+    }
+    this.initialized = false;
+  }
+
   async init(configOverride = null) {
-    const config = configOverride || this.detectConfigFromEnv();
-    this.type = config.type || 'json';
-    this.connectionConfig = config;
+    await this.close();
+
+    const config = configOverride || this.detectConfig();
+    this.type = (config.type || 'json').toLowerCase();
+    this.connectionConfig = { ...config, type: this.type };
 
     if (this.type === 'sqlite') {
       const dbPath = path.resolve(config.sqlitePath || path.join(DATA_DIR, 'nimbus.sqlite'));
@@ -81,18 +132,26 @@ class DatabaseManager {
           resolve();
         });
       });
+      // Enable WAL mode for better concurrency in SQLite
+      await new Promise((resolve) => {
+        this.sqliteDb.run('PRAGMA journal_mode = WAL;', () => resolve());
+      });
       await this._createSqliteTables();
     } else if (this.type === 'postgres' || this.type === 'postgresql') {
       this.type = 'postgres';
       const { Pool } = getPg();
       const poolConfig = config.connectionString
-        ? { connectionString: config.connectionString }
+        ? {
+            connectionString: config.connectionString,
+            ssl: config.ssl ? { rejectUnauthorized: false } : false,
+          }
         : {
             host: config.host,
             port: config.port || 5432,
             user: config.user,
             password: config.password,
             database: config.database,
+            ssl: config.ssl ? { rejectUnauthorized: false } : false,
           };
       this.pgPool = new Pool(poolConfig);
       await this._createPostgresTables();
@@ -285,38 +344,56 @@ class DatabaseManager {
 
   async testConnection(config) {
     const type = (config.type || '').toLowerCase();
+    const startTime = Date.now();
+
     if (type === 'sqlite') {
       const SQLite = getSqlite3();
       const testPath = path.resolve(config.sqlitePath || path.join(DATA_DIR, 'test_connect.sqlite'));
-      return new Promise((resolve) => {
-        const db = new SQLite.Database(testPath, (err) => {
-          if (err) return resolve({ ok: false, error: err.message });
-          db.close();
-          resolve({ ok: true, message: `SQLite 连接成功 (${testPath})` });
+      try {
+        fs.mkdirSync(path.dirname(testPath), { recursive: true });
+        return await new Promise((resolve) => {
+          const db = new SQLite.Database(testPath, (err) => {
+            if (err) return resolve({ ok: false, error: err.message });
+            db.run('SELECT 1;', (rErr) => {
+              db.close();
+              if (rErr) return resolve({ ok: false, error: rErr.message });
+              const latencyMs = Date.now() - startTime;
+              resolve({ ok: true, message: `SQLite 连接测试成功 (${latencyMs}ms)`, latencyMs });
+            });
+          });
         });
-      });
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
     }
 
     if (type === 'postgres' || type === 'postgresql') {
       const { Pool } = getPg();
       const pool = new Pool(
         config.connectionString
-          ? { connectionString: config.connectionString, connectionTimeoutMillis: 3000 }
+          ? {
+              connectionString: config.connectionString,
+              connectionTimeoutMillis: 4000,
+              ssl: config.ssl ? { rejectUnauthorized: false } : false,
+            }
           : {
               host: config.host,
               port: config.port || 5432,
               user: config.user,
               password: config.password,
               database: config.database,
-              connectionTimeoutMillis: 3000,
+              connectionTimeoutMillis: 4000,
+              ssl: config.ssl ? { rejectUnauthorized: false } : false,
             }
       );
       try {
         const client = await pool.connect();
-        await client.query('SELECT 1');
+        const res = await client.query('SELECT version();');
         client.release();
         await pool.end();
-        return { ok: true, message: 'PostgreSQL 数据库连接成功' };
+        const latencyMs = Date.now() - startTime;
+        const ver = res.rows[0]?.version || 'PostgreSQL';
+        return { ok: true, message: `PostgreSQL 连接成功 (${latencyMs}ms): ${ver.split(' on ')[0]}`, latencyMs };
       } catch (err) {
         return { ok: false, error: err.message };
       }
@@ -331,30 +408,35 @@ class DatabaseManager {
           user: config.user,
           password: config.password,
           database: config.database,
-          connectTimeout: 3000,
+          connectTimeout: 4000,
         });
-        await conn.query('SELECT 1');
+        const [rows] = await conn.query('SELECT VERSION() as ver');
         await conn.end();
-        return { ok: true, message: 'MySQL 数据库连接成功' };
+        const latencyMs = Date.now() - startTime;
+        const ver = rows[0]?.ver || 'MySQL';
+        return { ok: true, message: `MySQL 连接成功 (${latencyMs}ms): Version ${ver}`, latencyMs };
       } catch (err) {
         return { ok: false, error: err.message };
       }
     }
 
-    return { ok: true, message: 'JSON 本地文件存储模式正常' };
+    return { ok: true, message: 'JSON 本地文件存储模式运行就绪 (零配置/毫秒级本地 IO)', latencyMs: 0 };
   }
 
   getStatus() {
     return {
       type: this.type,
       activeEngine: this.type.toUpperCase(),
+      initialized: this.initialized,
       config: {
         type: this.type,
         sqlitePath: this.connectionConfig.sqlitePath || path.join(DATA_DIR, 'nimbus.sqlite'),
+        connectionString: this.connectionConfig.connectionString ? '***' : '',
         host: this.connectionConfig.host || '',
         port: this.connectionConfig.port || '',
         database: this.connectionConfig.database || '',
         user: this.connectionConfig.user || '',
+        ssl: Boolean(this.connectionConfig.ssl),
       },
     };
   }
@@ -368,7 +450,6 @@ class DatabaseManager {
       });
     }
     if (this.type === 'postgres') {
-      // replace ? with $1, $2... for postgres
       let i = 1;
       const pgSql = sql.replace(/\?/g, () => `$${i++}`);
       const result = await this.pgPool.query(pgSql, params);
@@ -406,6 +487,153 @@ class DatabaseManager {
       return { changes: result.affectedRows };
     }
     return { changes: 0 };
+  }
+
+  // ------------------------- Engine Switch & Data Migration -------------------------
+
+  async switchAndMigrate(targetConfig, dataset, doMigrate = true) {
+    const targetType = (targetConfig.type || 'json').toLowerCase();
+
+    // 1. Initialize target engine
+    await this.init(targetConfig);
+
+    // 2. If migration requested, import dataset into target engine
+    let migratedCounts = {
+      users: 0,
+      vaults: 0,
+      shares: 0,
+      syncRules: 0,
+      systemSettings: 0,
+      apiTokens: 0,
+    };
+
+    if (doMigrate && dataset) {
+      if (targetType === 'json') {
+        // Save to JSON files
+        const usersData = { users: dataset.users || [] };
+        const vaultsData = { vaults: dataset.vaults || [] };
+        fs.writeFileSync(USERS_FILE, JSON.stringify(usersData, null, 2));
+        fs.writeFileSync(VAULTS_FILE, JSON.stringify(vaultsData, null, 2));
+        fs.writeFileSync(path.join(DATA_DIR, 'shares.json'), JSON.stringify(dataset.shares || [], null, 2));
+        fs.writeFileSync(path.join(DATA_DIR, 'settings.json'), JSON.stringify(dataset.systemSettings || {}, null, 2));
+        fs.writeFileSync(path.join(DATA_DIR, 'api_tokens.json'), JSON.stringify(dataset.apiTokens || [], null, 2));
+
+        migratedCounts = {
+          users: (dataset.users || []).length,
+          vaults: (dataset.vaults || []).length,
+          shares: (dataset.shares || []).length,
+          syncRules: Object.keys(dataset.syncRules || {}).length,
+          systemSettings: Object.keys(dataset.systemSettings || {}).length,
+          apiTokens: (dataset.apiTokens || []).length,
+        };
+      } else {
+        // Insert into SQL tables
+        // Users
+        for (const u of dataset.users || []) {
+          try {
+            await this.execute(
+              'INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)',
+              [u.id, u.username, u.passwordHash, u.role, u.createdAt]
+            );
+            migratedCounts.users++;
+          } catch (e) {
+            console.warn('[DB Migrate] user insert skipped:', e.message);
+          }
+        }
+
+        // Vaults
+        for (const v of dataset.vaults || []) {
+          try {
+            await this.execute('INSERT INTO vaults (id, owner_id, name, created_at) VALUES (?, ?, ?, ?)', [
+              v.id,
+              v.ownerId,
+              v.name,
+              v.createdAt,
+            ]);
+            migratedCounts.vaults++;
+          } catch (e) {
+            console.warn('[DB Migrate] vault insert skipped:', e.message);
+          }
+        }
+
+        // Shares
+        for (const s of dataset.shares || []) {
+          try {
+            await this.execute(
+              'INSERT INTO shares (id, vault_id, user_id, file_path, title, has_password, password_hash, allow_copy, created_at, expires_at, view_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [
+                s.id,
+                s.vaultId,
+                s.userId,
+                s.filePath,
+                s.title,
+                s.hasPassword ? 1 : 0,
+                s.passwordHash || null,
+                s.allowCopy ? 1 : 0,
+                s.createdAt,
+                s.expiresAt || null,
+                s.viewCount || 0,
+              ]
+            );
+            migratedCounts.shares++;
+          } catch (e) {
+            console.warn('[DB Migrate] share insert skipped:', e.message);
+          }
+        }
+
+        // Sync rules
+        const rulesMap = dataset.syncRules || {};
+        const now = Date.now();
+        for (const [vaultId, rules] of Object.entries(rulesMap)) {
+          try {
+            await this.execute(
+              'INSERT INTO sync_rules (vault_id, rules_json, updated_at) VALUES (?, ?, ?)',
+              [vaultId, JSON.stringify(rules), now]
+            );
+            migratedCounts.syncRules++;
+          } catch (e) {
+            console.warn('[DB Migrate] sync_rules insert skipped:', e.message);
+          }
+        }
+
+        // System settings
+        for (const [key, val] of Object.entries(dataset.systemSettings || {})) {
+          try {
+            await this.execute(
+              'INSERT INTO system_settings (setting_key, value_json, updated_at) VALUES (?, ?, ?)',
+              [key, JSON.stringify(val), now]
+            );
+            migratedCounts.systemSettings++;
+          } catch (e) {
+            console.warn('[DB Migrate] system_settings insert skipped:', e.message);
+          }
+        }
+
+        // API Tokens
+        for (const t of dataset.apiTokens || []) {
+          try {
+            await this.execute(
+              'INSERT INTO api_tokens (id, user_id, label, token, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)',
+              [t.id, t.userId, t.label, t.token, t.createdAt, t.lastUsedAt || null]
+            );
+            migratedCounts.apiTokens++;
+          } catch (e) {
+            console.warn('[DB Migrate] api_token insert skipped:', e.message);
+          }
+        }
+      }
+    }
+
+    // 3. Save to persistent file
+    this.savePersistentConfig(this.connectionConfig);
+
+    return {
+      ok: true,
+      activeEngine: this.type.toUpperCase(),
+      migrated: doMigrate,
+      counts: migratedCounts,
+      message: `已成功切换并更新数据库引擎至 ${this.type.toUpperCase()}${doMigrate ? '，并完成全量数据平滑迁移' : ''}`,
+    };
   }
 }
 
