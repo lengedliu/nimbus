@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nimbus 管理后台</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="login-view" class="center-screen">
+  <form id="login-form" class="card">
+    <h1>Nimbus</h1>
+    <p class="subtitle">Obsidian 同步服务 · 管理后台</p>
+    <label>服务器地址
+      <input id="login-server" type="text" placeholder="留空则使用当前地址" />
+    </label>
+    <label>用户名
+      <input id="login-username" type="text" required autocomplete="username" />
+    </label>
+    <label>密码
+      <input id="login-password" type="password" required autocomplete="current-password" />
+    </label>
+    <button type="submit">登录</button>
+    <p id="login-error" class="error"></p>
+  </form>
+</div>
+
+<div id="app-view" class="app hidden">
+  <header class="topbar">
+    <div class="brand">☁️ Nimbus</div>
+    <div class="who">
+      <span id="who-username"></span>
+      <span id="who-role" class="badge"></span>
+      <button id="logout-btn" class="ghost">退出</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="nav-section-title">我的 Vault</div>
+      <ul id="vault-list" class="vault-list"></ul>
+      <button id="new-vault-btn" class="secondary block">+ 新建 Vault</button>
+
+      <div id="admin-nav" class="hidden">
+        <div class="nav-section-title" style="margin-top:24px">管理员</div>
+        <ul class="vault-list">
+          <li><button class="tab-btn" data-tab="users">用户管理</button></li>
+          <li><button class="tab-btn" data-tab="all-vaults">全部 Vault</button></li>
+        </ul>
+      </div>
+    </nav>
+
+    <main class="main" id="main-panel">
+      <div class="empty-state">从左侧选择一个 vault，或选择管理员功能</div>
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

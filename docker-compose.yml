@@ -1,0 +1,30 @@
+# Usage:
+#   cp .env.example .env      # set a real JWT_SECRET before first run
+#   docker compose up -d --build
+#   docker compose exec nimbus npm run create-user   # create the first (admin) account
+#
+# Dashboard:  http://localhost:8787/admin
+# WebSocket:  ws://localhost:8787/ws
+#
+# Notes/users/vaults persist in ./data on the host (bind-mounted below) —
+# back that folder up, it's the entire database.
+
+services:
+  nimbus:
+    build: .
+    container_name: nimbus-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8787}:8787"
+    environment:
+      PORT: 8787
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env before starting}
+      TOKEN_TTL: ${TOKEN_TTL:-30d}
+      DATA_DIR: /app/data
+      # Optional — leave unset to serve plain HTTP/WS. Set both + uncomment
+      # the volume line below to serve HTTPS/WSS directly from this container.
+      TLS_CERT_PATH: ${TLS_CERT_PATH:-}
+      TLS_KEY_PATH: ${TLS_KEY_PATH:-}
+    volumes:
+      - ./data:/app/data
+      # - ./certs:/app/certs:ro   # then set TLS_CERT_PATH=/app/certs/fullchain.pem etc.
