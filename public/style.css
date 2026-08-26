@@ -90,6 +90,39 @@ input, select, textarea {
   font-family: inherit;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+input[type="checkbox"], input[type="radio"] {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  accent-color: #58a6ff;
+  vertical-align: middle;
+}
+.form-checkbox-group {
+  margin: 16px 0;
+  display: flex;
+  align-items: center;
+}
+.form-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  margin: 0;
+  font-weight: 400;
+}
+.form-checkbox-label span {
+  color: var(--text-secondary);
+}
+.form-checkbox-label:hover span {
+  color: var(--text);
+}
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
@@ -651,6 +684,7 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
   z-index: 1000;
   padding: 20px;
 }
+.modal-container,
 .modal-dialog {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -662,6 +696,7 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
   flex-direction: column;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
   overflow: hidden;
+  position: relative;
 }
 .modal-header {
   padding: 16px 20px;

@@ -53,11 +53,19 @@
   function showModal(contentHtml, onMount) {
     modalContainer.innerHTML = contentHtml;
     modalBackdrop.classList.remove('hidden');
-    const closeBtn = modalContainer.querySelector('.modal-close');
-    if (closeBtn) closeBtn.onclick = closeModal;
+
+    // Attach click listeners to all close buttons (.modal-close)
+    modalContainer.querySelectorAll('.modal-close').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        closeModal();
+      };
+    });
+
     modalBackdrop.onclick = (e) => {
       if (e.target === modalBackdrop) closeModal();
     };
+
     if (onMount) onMount(modalContainer);
   }
 
@@ -65,6 +73,25 @@
     modalBackdrop.classList.add('hidden');
     modalContainer.innerHTML = '';
   }
+
+  // Global listeners for modal backdrop and keyboard ESC
+  modalBackdrop.addEventListener('click', (e) => {
+    if (e.target === modalBackdrop) closeModal();
+  });
+
+  modalContainer.addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('.modal-close');
+    if (closeBtn) {
+      e.preventDefault();
+      closeModal();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modalBackdrop.classList.contains('hidden')) {
+      closeModal();
+    }
+  });
 
   // ----------------------------- Auth ----------------------------------------
 
@@ -1285,15 +1312,28 @@
       <div class="panel-header">
         <h2>👥 用户管理</h2>
       </div>
-      <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:20px;">
-        <h4 style="margin:0 0 12px;font-size:14px;">添加新用户</h4>
-        <div class="form-inline">
-          <input id="nu-username" placeholder="用户名" />
-          <input id="nu-password" type="password" placeholder="密码" />
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;margin:0;">
-            <input id="nu-admin" type="checkbox" style="width:auto;margin:0" /> 管理员权限
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px;">
+        <h4 style="margin:0 0 16px;font-size:14px;font-weight:600;">➕ 添加新用户</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;">
+          <label style="margin:0;">
+            <span style="font-size:12.5px;color:var(--text-secondary);display:block;margin-bottom:4px;">用户名</span>
+            <input id="nu-username" placeholder="请输入用户名" style="margin:0;" />
           </label>
-          <button id="nu-submit" class="btn-primary">创建用户</button>
+          <label style="margin:0;">
+            <span style="font-size:12.5px;color:var(--text-secondary);display:block;margin-bottom:4px;">初始密码</span>
+            <input id="nu-password" type="password" placeholder="请输入密码" style="margin:0;" />
+          </label>
+        </div>
+
+        <div class="form-checkbox-group">
+          <label class="form-checkbox-label">
+            <input id="nu-admin" type="checkbox" />
+            <span>管理员权限（允许管理数据库、其他用户及全局设置）</span>
+          </label>
+        </div>
+
+        <div>
+          <button id="nu-submit" class="btn-primary">＋ 创建用户</button>
         </div>
       </div>
       <div id="users-table-wrap"></div>
