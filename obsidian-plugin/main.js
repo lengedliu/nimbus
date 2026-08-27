@@ -28,9 +28,25 @@ module.exports = class NimbusSyncPlugin extends Plugin {
     this.reconnectTimer = null;
     this.pingTimer = null;
 
-    // Ribbon icon for quick sync
-    this.addRibbonIcon('refresh-cw', 'Nimbus 同步', () => {
-      this.manualSync();
+    // Ribbon icon for quick sync / full sync
+    this.addRibbonIcon('refresh-cw', 'Nimbus: 一键全量同步', async () => {
+      await this.fullSyncAllFiles();
+    });
+
+    // Command palette commands
+    this.addCommand({
+      id: 'nimbus-full-sync',
+      name: '立即执行全量双向同步 (Full Sync Now)',
+      callback: async () => {
+        await this.fullSyncAllFiles();
+      }
+    });
+    this.addCommand({
+      id: 'nimbus-force-push',
+      name: '强制推送所有本地笔记到云端 (Force Push to Cloud)',
+      callback: async () => {
+        await this.forcePushAllLocalFiles();
+      }
     });
 
     // Status bar indicator
@@ -287,27 +303,71 @@ module.exports = class NimbusSyncPlugin extends Plugin {
   }
 
   async syncManifest(remoteManifest) {
+    new Notice('☁️ Nimbus 正在检查笔记库并自动同步...');
+    try {
+      const files = this.app.vault.getFiles();
+      const localFileMap = new Map();
+      for (const f of files) {
+        localFileMap.set(f.path, f);
+      }
+
+      let pullCount = 0;
+      let pushCount = 0;
+
+      // 1. Check files on server: pull missing or newer files
+      for (const [remotePath, meta] of Object.entries(remoteManifest)) {
+        const localFile = localFileMap.get(remotePath);
+        if (!localFile) {
+          // Local doesn't have it -> pull from server
+          this.sendWsMessage({ type: 'pull', path: remotePath });
+          pullCount++;
+        } else if (meta && meta.hash) {
+          // File exists locally, remember server hash
+          this.fileHashes.set(remotePath, meta.hash);
+        }
+      }
+
+      // 2. Check local files: push all local files that aren't on server yet
+      for (const f of files) {
+        if (!remoteManifest[f.path]) {
+          await this.pushLocalFile(f);
+          pushCount++;
+        }
+      }
+
+      if (pullCount > 0 || pushCount > 0) {
+        new Notice(`⚡ 自动同步进行中: 上传 ${pushCount} 个本地文件，下载 ${pullCount} 个云端文件`);
+      } else {
+        new Notice('✅ 本地笔记与 Nimbus 云端已保持一致');
+      }
+    } catch (err) {
+      console.error('[Nimbus] 自动全量同步异常:', err);
+    }
+  }
+
+  async fullSyncAllFiles() {
+    new Notice('☁️ 开始全量双向同步...');
     const files = this.app.vault.getFiles();
-    const localFileMap = new Map();
-    for (const f of files) {
-      localFileMap.set(f.path, f);
+    if (!this.settings.token || !this.settings.vaultId) {
+      new Notice('❌ 请先在 Nimbus 设置中完成登录并绑定 Vault');
+      return;
     }
 
-    // Pull missing or newer files from server
-    for (const [remotePath, meta] of Object.entries(remoteManifest)) {
-      const localFile = localFileMap.get(remotePath);
-      if (!localFile) {
-        // Request download
-        this.sendWsMessage({ type: 'pull', path: remotePath });
-      }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.connectWebSocket();
+      await new Promise((r) => setTimeout(r, 1200));
     }
 
-    // Push local files not in remote manifest
+    let pushed = 0;
     for (const f of files) {
-      if (!remoteManifest[f.path]) {
-        await this.pushLocalFile(f);
-      }
+      await this.pushLocalFile(f);
+      pushed++;
     }
+    new Notice(`✅ 全量推送完成: 共扫描并推送 ${pushed} 个笔记/附件至云端`);
+  }
+
+  async forcePushAllLocalFiles() {
+    await this.fullSyncAllFiles();
   }
 
   async applyRemoteChange(filePath, base64Content, mtime, hash) {
