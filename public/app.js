@@ -205,7 +205,14 @@
           if (btn) btn.textContent = '登录';
         }
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to check auth status on serverBase:', state.serverBase, err);
+      // Fallback to local origin if custom server address fails
+      if (state.serverBase !== window.location.origin) {
+        state.serverBase = window.location.origin;
+        checkAuthStatus();
+      }
+    }
   }
 
   $('#login-form').addEventListener('submit', async (e) => {
@@ -214,7 +221,17 @@
     state.serverBase = normalizeServerUrl(serverInput);
     const username = $('#login-username').value.trim();
     const password = $('#login-password').value;
-    $('#login-error').textContent = '';
+    const errorEl = $('#login-error');
+    errorEl.textContent = '';
+    errorEl.style.display = 'none';
+
+    const submitBtn = $('#login-form button[type="submit"]');
+    const originalBtnText = submitBtn ? submitBtn.textContent : '登录';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '正在连接...';
+    }
+
     const endpoint = isBootstrap ? '/api/auth/register' : '/api/auth/login';
     try {
       const res = await fetch(state.serverBase.replace(/\/$/, '') + endpoint, {
@@ -223,7 +240,7 @@
         body: JSON.stringify({ username, password }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error || (isBootstrap ? '注册失败' : '登录失败'));
+      if (!res.ok) throw new Error(body.error || (isBootstrap ? '注册失败' : '账号或密码不正确'));
       state.token = body.token;
       state.user = body.user;
       localStorage.setItem('nimbus_server', state.serverBase);
@@ -231,7 +248,13 @@
       localStorage.setItem('nimbus_user', JSON.stringify(state.user));
       enterApp();
     } catch (err) {
-      $('#login-error').textContent = err.message;
+      errorEl.textContent = err.message || '网络连接失败，请检查服务器地址';
+      errorEl.style.display = 'block';
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+      }
     }
   });
 
@@ -3250,13 +3273,6 @@
           renderSettingsPanel('account');
         });
       });
-
-            <div id="password-change-result" style="margin:10px 0;"></div>
-
-            <button type="submit" class="btn-primary" style="margin-top:8px;">确认修改密码</button>
-          </form>
-        </div>
-      `;
 
       $('#change-password-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
