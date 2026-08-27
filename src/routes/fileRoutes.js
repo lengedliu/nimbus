@@ -7,18 +7,26 @@ const syncLogger = require('../syncLogger');
 const router = express.Router();
 router.use(requireAuth);
 
-function checkAccess(req, res) {
+function checkAccess(req, res, requireWrite = false) {
   const { vaultId } = req.params;
-  if (!vaults.userOwnsVault(req.user.id, vaultId)) {
-    res.status(404).json({ error: 'Not found' });
-    return false;
+  const isAdmin = req.user.role === 'admin';
+  if (requireWrite) {
+    if (!vaults.hasWriteAccess(req.user.id, vaultId, isAdmin)) {
+      res.status(403).json({ error: '此笔记库仅支持只读访问，无写入修改权限' });
+      return false;
+    }
+  } else {
+    if (!vaults.hasReadAccess(req.user.id, vaultId, isAdmin)) {
+      res.status(404).json({ error: 'Not found or no access' });
+      return false;
+    }
   }
   return true;
 }
 
 // GET file content
 router.get('/:vaultId/files/*', (req, res) => {
-  if (!checkAccess(req, res)) return;
+  if (!checkAccess(req, res, false)) return;
   const relPath = req.params[0];
   const buf = storage.readFile(req.params.vaultId, relPath);
   if (buf === null) return res.status(404).json({ error: 'File not found' });
@@ -47,7 +55,7 @@ router.put(
   '/:vaultId/files/*',
   express.raw({ type: '*/*', limit: '50mb' }),
   (req, res) => {
-    if (!checkAccess(req, res)) return;
+    if (!checkAccess(req, res, true)) return;
     const relPath = req.params[0];
     const mtime = req.headers['x-mtime'] ? parseInt(req.headers['x-mtime'], 10) : undefined;
     const baseHash = req.headers['x-base-hash'] || undefined;
@@ -108,7 +116,7 @@ router.put(
 
 // DELETE file
 router.delete('/:vaultId/files/*', (req, res) => {
-  if (!checkAccess(req, res)) return;
+  if (!checkAccess(req, res, true)) return;
   const relPath = req.params[0];
   const deviceName = req.headers['x-device-name'] || 'REST / Web Client';
   const ok = storage.deleteFile(req.params.vaultId, relPath);

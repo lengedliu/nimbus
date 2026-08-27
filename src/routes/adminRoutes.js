@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth, requireAdmin } = require('../auth');
 const users = require('../users');
 const vaultsStore = require('../vaults');
+const vaultMembers = require('../vaultMembers');
 const sharesStore = require('../shares');
 const syncRulesStore = require('../syncRules');
 const settingsManager = require('../settings');
@@ -12,18 +13,98 @@ const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 router.get('/users', (req, res) => {
-  res.json({ users: users.listAll() });
+  const allUsers = users.listAll();
+  const allVaults = vaultsStore.getRawVaults();
+  const vaultMap = Object.fromEntries(allVaults.map((v) => [v.id, v.name]));
+
+  const usersWithVaults = allUsers.map((u) => {
+    const memberships = vaultMembers.listForUser(u.id).map((m) => ({
+      vaultId: m.vaultId,
+      vaultName: vaultMap[m.vaultId] || m.vaultId,
+      permission: m.permission,
+    }));
+    const owned = allVaults.filter((v) => v.ownerId === u.id).map((v) => ({
+      vaultId: v.id,
+      vaultName: v.name,
+      permission: 'owner',
+    }));
+    return {
+      ...u,
+      memberships,
+      ownedVaults: owned,
+      totalAccessibleVaults: memberships.length + owned.length,
+    };
+  });
+
+  res.json({ users: usersWithVaults });
 });
 
-router.post('/users', (req, res) => {
-  const { username, password, role } = req.body || {};
+router.post('/users', async (req, res) => {
+  const { username, password, role, vaultAssignments } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   try {
     const user = users.createUser(username, password, role === 'admin' ? 'admin' : 'user');
+
+    if (Array.isArray(vaultAssignments) && vaultAssignments.length > 0) {
+      for (const item of vaultAssignments) {
+        if (item && item.vaultId) {
+          const perm = item.permission === 'read-only' ? 'read-only' : 'read-write';
+          await vaultMembers.addOrUpdateMember(item.vaultId, user.id, perm);
+        }
+      }
+    }
+
     res.json({ user });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
+});
+
+router.get('/users/:userId/vaults', (req, res) => {
+  const { userId } = req.params;
+  const user = users.findById(userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const allVaults = vaultsStore.getRawVaults();
+  const memberships = vaultMembers.listForUser(userId);
+  const memMap = Object.fromEntries(memberships.map((m) => [m.vaultId, m.permission]));
+
+  const vaultsList = allVaults.map((v) => ({
+    id: v.id,
+    name: v.name,
+    ownerId: v.ownerId,
+    isOwner: v.ownerId === userId,
+    assigned: v.ownerId === userId || !!memMap[v.id],
+    permission: v.ownerId === userId ? 'owner' : (memMap[v.id] || 'read-write'),
+  }));
+
+  res.json({ user, vaults: vaultsList });
+});
+
+router.put('/users/:userId/vaults', async (req, res) => {
+  const { userId } = req.params;
+  const { vaultAssignments } = req.body || {};
+  const user = users.findById(userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const current = vaultMembers.listForUser(userId);
+  for (const c of current) {
+    await vaultMembers.removeMember(c.vaultId, userId);
+  }
+
+  if (Array.isArray(vaultAssignments)) {
+    for (const item of vaultAssignments) {
+      if (item && item.vaultId) {
+        const v = vaultsStore.getById(item.vaultId);
+        if (v && v.ownerId !== userId) {
+          const perm = item.permission === 'read-only' ? 'read-only' : 'read-write';
+          await vaultMembers.addOrUpdateMember(item.vaultId, userId, perm);
+        }
+      }
+    }
+  }
+
+  res.json({ ok: true, memberships: vaultMembers.listForUser(userId) });
 });
 
 router.delete('/users/:userId', (req, res) => {
@@ -38,7 +119,7 @@ router.delete('/users/:userId', (req, res) => {
 router.get('/vaults', (req, res) => {
   const allUsers = users.listAll();
   const byId = Object.fromEntries(allUsers.map((u) => [u.id, u.username]));
-  const all = allUsers.flatMap((u) => vaultsStore.listForUser(u.id));
+  const all = vaultsStore.getRawVaults();
   const withOwner = all.map((v) => ({ ...v, ownerUsername: byId[v.ownerId] || '(unknown)' }));
   res.json({ vaults: withOwner });
 });

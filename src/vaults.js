@@ -4,6 +4,7 @@ const { v4: uuid } = require('uuid');
 const JsonDb = require('./jsonDb');
 const { VAULTS_FILE, VAULTS_DIR } = require('./config');
 const dbManager = require('./db');
+const vaultMembers = require('./vaultMembers');
 
 const jsonDb = new JsonDb(VAULTS_FILE, { vaults: [] });
 
@@ -36,12 +37,56 @@ async function loadFromDb() {
   }
 }
 
-function listForUser(userId) {
-  return vaultsCache.filter((v) => v.ownerId === userId);
+function listForUser(userId, isAdmin = false) {
+  if (isAdmin) {
+    return vaultsCache.map((v) => ({
+      ...v,
+      myPermission: v.ownerId === userId ? 'owner' : 'admin',
+      isOwner: v.ownerId === userId,
+    }));
+  }
+
+  const owned = vaultsCache
+    .filter((v) => v.ownerId === userId)
+    .map((v) => ({ ...v, myPermission: 'owner', isOwner: true }));
+
+  const memberRecords = vaultMembers.listForUser(userId);
+  const shared = [];
+  for (const m of memberRecords) {
+    const v = getById(m.vaultId);
+    if (v && v.ownerId !== userId) {
+      shared.push({
+        ...v,
+        myPermission: m.permission || 'read-write',
+        isOwner: false,
+      });
+    }
+  }
+
+  return [...owned, ...shared];
 }
 
 function getById(vaultId) {
   return vaultsCache.find((v) => v.id === vaultId);
+}
+
+function getUserPermission(userId, vaultId, isAdmin = false) {
+  const v = getById(vaultId);
+  if (!v) return null;
+  if (v.ownerId === userId) return 'owner';
+  if (isAdmin) return 'admin';
+  const m = vaultMembers.getMember(vaultId, userId);
+  return m ? m.permission : null;
+}
+
+function hasReadAccess(userId, vaultId, isAdmin = false) {
+  const perm = getUserPermission(userId, vaultId, isAdmin);
+  return !!perm;
+}
+
+function hasWriteAccess(userId, vaultId, isAdmin = false) {
+  const perm = getUserPermission(userId, vaultId, isAdmin);
+  return perm === 'owner' || perm === 'admin' || perm === 'read-write';
 }
 
 function create(ownerId, name) {
@@ -70,8 +115,9 @@ function create(ownerId, name) {
   return vault;
 }
 
-function remove(vaultId) {
+async function remove(vaultId) {
   vaultsCache = vaultsCache.filter((v) => v.id !== vaultId);
+  await vaultMembers.removeAllForVault(vaultId);
 
   if (dbManager.type === 'json') {
     jsonDb.update((data) => {
@@ -108,6 +154,9 @@ module.exports = {
   vaultRoot,
   vaultFilesRoot,
   userOwnsVault,
+  getUserPermission,
+  hasReadAccess,
+  hasWriteAccess,
   loadFromDb,
   getRawVaults: () => vaultsCache,
 };

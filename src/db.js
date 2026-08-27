@@ -249,6 +249,16 @@ class DatabaseManager {
         timestamp INTEGER NOT NULL
       );
     `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS vault_members (
+        id TEXT PRIMARY KEY,
+        vault_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        permission TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(vault_id, user_id)
+      );
+    `);
   }
 
   async _createPostgresTables() {
@@ -311,6 +321,14 @@ class DatabaseManager {
         status VARCHAR(32) NOT NULL,
         detail TEXT,
         timestamp BIGINT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS vault_members (
+        id VARCHAR(64) PRIMARY KEY,
+        vault_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        permission VARCHAR(32) NOT NULL,
+        created_at BIGINT NOT NULL,
+        UNIQUE(vault_id, user_id)
       );
     `);
   }
@@ -387,6 +405,16 @@ class DatabaseManager {
         status VARCHAR(32) NOT NULL,
         detail TEXT,
         timestamp BIGINT NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    await this.mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS vault_members (
+        id VARCHAR(64) PRIMARY KEY,
+        vault_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        permission VARCHAR(32) NOT NULL,
+        created_at BIGINT NOT NULL,
+        UNIQUE KEY uk_vault_user (vault_id, user_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
   }

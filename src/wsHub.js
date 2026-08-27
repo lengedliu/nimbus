@@ -48,14 +48,17 @@ class FnsHub {
       const vaultId = query.vaultId;
       const vault = vaultId && vaults.getById(vaultId);
 
-      if (!user || !vault || vault.ownerId !== user.id) {
+      const isAdmin = user && user.role === 'admin';
+      if (!user || !vault || !vaults.hasReadAccess(user.id, vaultId, isAdmin)) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
       }
 
+      const permission = vaults.getUserPermission(user.id, vaultId, isAdmin);
+
       this.wss.handleUpgrade(req, socket, head, (ws) => {
-        this._onConnection(ws, user, vaultId, query.deviceId || query.deviceName || 'Obsidian Client');
+        this._onConnection(ws, user, vaultId, query.deviceId || query.deviceName || 'Obsidian Client', permission);
       });
     });
   }
@@ -91,11 +94,11 @@ class FnsHub {
     }));
   }
 
-  _onConnection(ws, user, vaultId, deviceName) {
-    const client = { ws, userId: user.id, username: user.username, deviceName, connectedAt: Date.now() };
+  _onConnection(ws, user, vaultId, deviceName, permission = 'read-write') {
+    const client = { ws, userId: user.id, username: user.username, deviceName, permission, connectedAt: Date.now() };
     this._room(vaultId).add(client);
 
-    this._send(ws, { type: 'init', manifest: storage.getManifest(vaultId) });
+    this._send(ws, { type: 'init', manifest: storage.getManifest(vaultId), permission });
 
     ws.on('message', (raw) => this._onMessage(client, vaultId, raw));
     ws.on('close', () => this._room(vaultId).delete(client));
@@ -156,6 +159,10 @@ class FnsHub {
       }
 
       if (msg.type === 'push') {
+        if (client.permission === 'read-only') {
+          return this._send(client.ws, { type: 'error', message: '只读权限，禁止推送更改', path: msg.path });
+        }
+
         if (syncRules.isPathIgnored(vaultId, msg.path)) {
           syncLogger.recordLog({
             vaultId,
@@ -222,6 +229,10 @@ class FnsHub {
       }
 
       if (msg.type === 'delete') {
+        if (client.permission === 'read-only') {
+          return this._send(client.ws, { type: 'error', message: '只读权限，禁止删除文件', path: msg.path });
+        }
+
         const ok = storage.deleteFile(vaultId, msg.path);
         this._logActivity(vaultId, { type: 'delete', path: msg.path, userId: client.userId });
         syncLogger.recordLog({

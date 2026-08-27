@@ -313,28 +313,33 @@
   function renderVaultList() {
     const ul = $('#vault-list');
     ul.innerHTML = '';
+    const isAdmin = state.user?.role === 'admin';
+
     for (const v of state.vaults) {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.className = 'vault-item' + (state.activeVaultId === v.id ? ' active' : '');
-      btn.innerHTML = `<span>📓 ${escapeHtml(v.name)}</span>`;
+      const tag = v.isOwner ? '' : v.myPermission === 'read-only' ? ' <span style="font-size:10px;opacity:0.75;padding:1px 4px;border-radius:3px;background:rgba(230,126,34,0.2);color:#e67e22;">只读</span>' : ' <span style="font-size:10px;opacity:0.75;padding:1px 4px;border-radius:3px;background:rgba(46,204,113,0.2);color:#2ecc71;">协作</span>';
+      btn.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📓 ${escapeHtml(v.name)}${tag}</span>`;
       btn.addEventListener('click', () => openVault(v.id));
 
-      const del = document.createElement('button');
-      del.className = 'del';
-      del.textContent = '✕';
-      del.title = '删除 vault';
-      del.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm(`确定删除 vault "${v.name}"？服务器上的笔记数据不会自动清除，只是取消关联。`)) return;
-        await api(`/api/vaults/${v.id}`, { method: 'DELETE' });
-        if (state.activeVaultId === v.id) {
-          state.activeVaultId = null;
-          mainPanel.innerHTML = '<div class="empty-state">从左侧选择一个 vault</div>';
-        }
-        loadVaults();
-      });
-      btn.appendChild(del);
+      if (v.isOwner || isAdmin) {
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = '✕';
+        del.title = '删除 vault';
+        del.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm(`确定删除 vault "${v.name}"？服务器上的笔记数据不会自动清除，只是取消关联。`)) return;
+          await api(`/api/vaults/${v.id}`, { method: 'DELETE' });
+          if (state.activeVaultId === v.id) {
+            state.activeVaultId = null;
+            mainPanel.innerHTML = '<div class="empty-state">从左侧选择一个 vault</div>';
+          }
+          loadVaults();
+        });
+        btn.appendChild(del);
+      }
       li.appendChild(btn);
       ul.appendChild(li);
     }
@@ -495,6 +500,10 @@
     const vault = state.vaults.find((v) => v.id === vaultId) || { name: 'Vault', id: vaultId };
     mainPanel.innerHTML = '';
 
+    const isReadOnly = vault.myPermission === 'read-only';
+    const permBadgeText = vault.isOwner ? '所有者' : vault.myPermission === 'read-only' ? '只读' : '读写';
+    const permBadgeClass = vault.isOwner ? 'primary' : vault.myPermission === 'read-only' ? 'warning' : 'success';
+
     // Header
     const header = document.createElement('div');
     header.className = 'vault-header';
@@ -502,10 +511,11 @@
       <div class="vault-title">
         <h2>📓 ${escapeHtml(vault.name)}</h2>
         <span class="badge" style="font-size:11px">${Object.keys(state.manifest).length} 个文件</span>
+        <span class="badge ${permBadgeClass}" style="font-size:11px">权限: ${permBadgeText}</span>
       </div>
       <div class="vault-actions">
-        <button class="btn-primary" id="v-new-note-btn">+ 新建笔记</button>
-        <button class="secondary" id="v-upload-btn">⬆️ 上传文件</button>
+        ${!isReadOnly ? '<button class="btn-primary" id="v-new-note-btn">+ 新建笔记</button>' : ''}
+        ${!isReadOnly ? '<button class="secondary" id="v-upload-btn">⬆️ 上传文件</button>' : ''}
         <button class="secondary" id="v-export-btn">📦 导出 ZIP</button>
         <button class="secondary" id="v-connect-btn">⚡ Obsidian 连接</button>
       </div>
@@ -517,6 +527,7 @@
     subtabsBar.className = 'subtabs-bar';
     subtabsBar.innerHTML = `
       <button class="subtab-btn ${state.activeSubtab === 'files' ? 'active' : ''}" data-sub="files">📄 笔记与文件</button>
+      <button class="subtab-btn ${state.activeSubtab === 'permissions' ? 'active' : ''}" data-sub="permissions">👥 成员与权限</button>
       <button class="subtab-btn ${state.activeSubtab === 'stats' ? 'active' : ''}" data-sub="stats">📊 统计与监控</button>
       <button class="subtab-btn ${state.activeSubtab === 'synclogs' ? 'active' : ''}" data-sub="synclogs">📋 同步日志</button>
       <button class="subtab-btn ${state.activeSubtab === 'shares' ? 'active' : ''}" data-sub="shares">🔗 公开分享</button>
@@ -538,15 +549,18 @@
     mainPanel.appendChild(contentBox);
 
     // Top action handlers
-    $('#v-new-note-btn').onclick = () => createNewNotePrompt(vaultId);
+    if (!isReadOnly) {
+      $('#v-new-note-btn').onclick = () => createNewNotePrompt(vaultId);
+      $('#v-upload-btn').onclick = () => triggerFileUpload(vaultId);
+    }
     $('#v-export-btn').onclick = () => {
       window.open(`${state.serverBase.replace(/\/$/, '')}/api/vaults/${vaultId}/export?token=${state.token}`, '_blank');
     };
     $('#v-connect-btn').onclick = () => showObsidianConnectModal(vault);
-    $('#v-upload-btn').onclick = () => triggerFileUpload(vaultId);
 
     // Render active subtab
     if (state.activeSubtab === 'files') renderFilesSubtab(vaultId, contentBox);
+    else if (state.activeSubtab === 'permissions') renderPermissionsSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'stats') renderStatsSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'synclogs') renderVaultSyncLogsSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'shares') renderSharesSubtab(vaultId, contentBox);
@@ -1035,6 +1049,211 @@
         }
       };
     });
+  }
+
+  // --------------------------- Subtab: Permissions & Members ----------------
+  async function renderPermissionsSubtab(vaultId, container) {
+    container.innerHTML = '<div class="empty-state">加载成员与权限信息中…</div>';
+    try {
+      const res = await api(`/api/vaults/${vaultId}/permissions`);
+      const data = await res.json();
+
+      const { vault, myPermission, isOwner, isAdmin, members, allUsers } = data;
+      const canManage = isOwner || isAdmin;
+
+      // Filter users who can be added (not owner, not already added)
+      const existingUserIds = new Set([vault.ownerId, ...members.map((m) => m.userId)]);
+      const candidateUsers = (allUsers || []).filter((u) => !existingUserIds.has(u.id));
+
+      container.innerHTML = `
+        <div class="panel-header" style="margin-bottom:16px;">
+          <div>
+            <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:8px;">
+              <span>👥</span>
+              <span>笔记库权限与成员管理</span>
+            </h3>
+            <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">
+              当前 Vault: <b>${escapeHtml(vault.name)}</b> · 创建者: <b>${escapeHtml(vault.ownerUsername)}</b>
+              ${isOwner ? ' <span class="badge primary" style="font-size:11px">您是所有者</span>' : ''}
+              ${!isOwner ? ` <span class="badge ${myPermission === 'read-only' ? 'warning' : 'success'}" style="font-size:11px">您的权限: ${myPermission === 'read-only' ? '只读' : '读写'}</span>` : ''}
+            </div>
+          </div>
+        </div>
+
+        ${canManage ? `
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:24px;">
+            <h4 style="margin:0 0 12px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;">
+              <span>➕</span> 授权/添加协作成员
+            </h4>
+            <div style="display:grid;grid-template-columns:minmax(180px, 1fr) 180px auto;gap:12px;align-items:end;">
+              <label style="margin:0;">
+                <span style="font-size:12.5px;color:var(--text-secondary);display:block;margin-bottom:4px;">选择用户</span>
+                ${candidateUsers.length > 0 ? `
+                  <select id="perm-user-select" style="margin:0;">
+                    <option value="">-- 请选择要授权的用户 --</option>
+                    ${candidateUsers.map((u) => `<option value="${u.id}">${escapeHtml(u.username)} (${u.role === 'admin' ? '管理员' : '普通用户'})</option>`).join('')}
+                  </select>
+                ` : `
+                  <input id="perm-username-input" placeholder="输入已存在的用户名" style="margin:0;" />
+                `}
+              </label>
+              <label style="margin:0;">
+                <span style="font-size:12.5px;color:var(--text-secondary);display:block;margin-bottom:4px;">赋予权限</span>
+                <select id="perm-type-select" style="margin:0;">
+                  <option value="read-write">读写 (Read & Write) - 允许同步修改</option>
+                  <option value="read-only">只读 (Read Only) - 仅允许拉取与查看</option>
+                </select>
+              </label>
+              <button id="add-member-btn" class="btn-primary" style="margin:0;height:38px;">＋ 确认授权</button>
+            </div>
+          </div>
+        ` : `
+          <div style="background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.2);border-radius:var(--radius);padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--text-secondary);">
+            ℹ️ 您当前作为协作成员访问此 Vault。只有该 Vault 的创建者 (<b>${escapeHtml(vault.ownerUsername)}</b>) 或系统管理员可以修改成员权限。
+          </div>
+        `}
+
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;font-size:13.5px;display:flex;align-items:center;justify-content:space-between;">
+            <span>当前成员列表 (${members.length + 1} 人)</span>
+            <span style="font-size:12px;color:var(--muted);font-weight:normal;">所有者享有最高管理与删除权限</span>
+          </div>
+          <table class="data-table" style="width:100%;margin:0;">
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>系统角色</th>
+                <th>Vault 权限级别</th>
+                <th>授权时间</th>
+                ${canManage ? '<th style="text-align:right">操作</th>' : ''}
+              </tr>
+            </thead>
+            <tbody id="perm-members-tbody">
+              <!-- Owner row -->
+              <tr style="background:rgba(255,255,255,0.02);">
+                <td>
+                  <b style="display:inline-flex;align-items:center;gap:6px;">
+                    <span>👑</span>
+                    <span>${escapeHtml(vault.ownerUsername)}</span>
+                  </b>
+                  <span class="badge primary" style="font-size:10px;margin-left:6px;">所有者 (Owner)</span>
+                </td>
+                <td><span class="badge">所有者</span></td>
+                <td>
+                  <span class="badge primary" style="font-size:11px;">全部权限 (所有者)</span>
+                </td>
+                <td class="meta">${new Date(vault.createdAt).toLocaleString()}</td>
+                ${canManage ? '<td style="text-align:right;color:var(--muted);font-size:12px;">创建者 (不可撤销)</td>' : ''}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      const tbody = container.querySelector('#perm-members-tbody');
+
+      for (const m of members) {
+        const tr = document.createElement('tr');
+        const isRw = m.permission === 'read-write';
+        const permBadge = isRw
+          ? '<span class="badge success" style="font-size:11px;">✏️ 读写 (Read-Write)</span>'
+          : '<span class="badge warning" style="font-size:11px;">👁️ 只读 (Read-Only)</span>';
+
+        tr.innerHTML = `
+          <td>
+            <b>👤 ${escapeHtml(m.username)}</b>
+          </td>
+          <td><span class="badge">${m.role}</span></td>
+          <td>
+            ${canManage ? `
+              <select class="member-perm-change-select" data-user-id="${m.userId}" style="padding:3px 8px;font-size:12px;border-radius:4px;margin:0;width:auto;">
+                <option value="read-write" ${isRw ? 'selected' : ''}>✏️ 读写 (可同步修改)</option>
+                <option value="read-only" ${!isRw ? 'selected' : ''}>👁️ 只读 (仅查看拉取)</option>
+              </select>
+            ` : permBadge}
+          </td>
+          <td class="meta">${new Date(m.createdAt).toLocaleString()}</td>
+          ${canManage ? `
+            <td class="actions" style="text-align:right">
+              <button class="danger revoke-member-btn" data-user-id="${m.userId}" data-username="${escapeHtml(m.username)}" style="font-size:12px;padding:4px 10px;">移除权限</button>
+            </td>
+          ` : ''}
+        `;
+        tbody.appendChild(tr);
+      }
+
+      if (canManage) {
+        // Add member button handler
+        const addBtn = container.querySelector('#add-member-btn');
+        if (addBtn) {
+          addBtn.onclick = async () => {
+            const userSelect = container.querySelector('#perm-user-select');
+            const usernameInput = container.querySelector('#perm-username-input');
+            const permSelect = container.querySelector('#perm-type-select');
+
+            const userId = userSelect ? userSelect.value : undefined;
+            const username = usernameInput ? usernameInput.value.trim() : undefined;
+            const permission = permSelect.value;
+
+            if (!userId && !username) {
+              toast('请选择或输入要授权的用户');
+              return;
+            }
+
+            try {
+              await api(`/api/vaults/${vaultId}/permissions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, username, permission }),
+              });
+              toast('成员权限授权成功');
+              renderPermissionsSubtab(vaultId, container);
+            } catch (e) {
+              toast('授权失败: ' + e.message);
+            }
+          };
+        }
+
+        // Change permission selects
+        container.querySelectorAll('.member-perm-change-select').forEach((sel) => {
+          sel.onchange = async () => {
+            const targetUserId = sel.dataset.userId;
+            const newPerm = sel.value;
+            try {
+              await api(`/api/vaults/${vaultId}/permissions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: targetUserId, permission: newPerm }),
+              });
+              toast('已更新成员权限');
+            } catch (e) {
+              toast('更新失败: ' + e.message);
+              renderPermissionsSubtab(vaultId, container);
+            }
+          };
+        });
+
+        // Revoke buttons
+        container.querySelectorAll('.revoke-member-btn').forEach((btn) => {
+          btn.onclick = async () => {
+            const targetUserId = btn.dataset.userId;
+            const targetUsername = btn.dataset.username;
+            if (!confirm(`确定撤销用户 "${targetUsername}" 对该笔记库的访问权限？`)) return;
+            try {
+              await api(`/api/vaults/${vaultId}/permissions/${targetUserId}`, {
+                method: 'DELETE',
+              });
+              toast(`已撤销 "${targetUsername}" 的权限`);
+              renderPermissionsSubtab(vaultId, container);
+            } catch (e) {
+              toast('撤销失败: ' + e.message);
+            }
+          };
+        });
+      }
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state">加载权限配置失败: ${escapeHtml(err.message)}</div>`;
+    }
   }
 
   // --------------------------- Subtab: Sync Rules ---------------------------
@@ -1776,15 +1995,23 @@
 
   async function renderUsersPanel() {
     mainPanel.innerHTML = '<div class="empty-state">加载用户列表中…</div>';
-    const res = await api('/api/admin/users');
-    const body = await res.json();
+    const [usersRes, vaultsRes] = await Promise.all([
+      api('/api/admin/users'),
+      api('/api/admin/vaults'),
+    ]);
+    const usersBody = await usersRes.json();
+    const vaultsBody = await vaultsRes.json();
+    const allVaults = vaultsBody.vaults || [];
+    const usersList = usersBody.users || [];
 
     mainPanel.innerHTML = `
       <div class="panel-header">
-        <h2>👥 用户管理</h2>
+        <h2>👥 用户管理与 Vault 授权</h2>
       </div>
       <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px;">
-        <h4 style="margin:0 0 16px;font-size:14px;font-weight:600;">➕ 添加新用户</h4>
+        <h4 style="margin:0 0 16px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;">
+          <span>➕</span> 添加新用户并分配权限
+        </h4>
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;">
           <label style="margin:0;">
             <span style="font-size:12.5px;color:var(--text-secondary);display:block;margin-bottom:4px;">用户名</span>
@@ -1796,32 +2023,87 @@
           </label>
         </div>
 
-        <div class="form-checkbox-group">
+        <div class="form-checkbox-group" style="margin-top:14px;">
           <label class="form-checkbox-label">
             <input id="nu-admin" type="checkbox" />
-            <span>管理员权限（允许管理数据库、其他用户及全局设置）</span>
+            <span>管理员权限（允许管理系统数据库、全局用户及所有 Vault 配置）</span>
           </label>
         </div>
 
-        <div>
-          <button id="nu-submit" class="btn-primary">＋ 创建用户</button>
+        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;">
+              <span>📂</span> 关联并授权 Vaults 笔记库 (可选)
+            </span>
+            ${allVaults.length > 0 ? `
+              <div style="font-size:12px;display:flex;gap:8px;">
+                <button type="button" id="nu-select-all-vaults" class="secondary" style="padding:2px 8px;font-size:11px;">全选</button>
+                <button type="button" id="nu-clear-vaults" class="secondary" style="padding:2px 8px;font-size:11px;">清空</button>
+              </div>
+            ` : ''}
+          </div>
+
+          ${allVaults.length === 0 ? `
+            <div style="font-size:12.5px;color:var(--muted);padding:10px 0;">
+              系统内暂无其他 Vault，创建用户后可随时在 Vault 页面中添加授权。
+            </div>
+          ` : `
+            <div id="nu-vaults-list" style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;">
+              ${allVaults.map((v) => `
+                <div class="nu-vault-item" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">
+                  <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;flex:1;overflow:hidden;">
+                    <input type="checkbox" class="nu-vault-check" data-vault-id="${v.id}" />
+                    <span style="font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📓 ${escapeHtml(v.name)}</span>
+                    <span style="font-size:11px;color:var(--muted);">(所有者: ${escapeHtml(v.ownerUsername)})</span>
+                  </label>
+                  <select class="nu-vault-perm" data-vault-id="${v.id}" style="padding:2px 8px;font-size:12px;border-radius:4px;margin:0;width:auto;">
+                    <option value="read-write">✏️ 读写 (Read-Write)</option>
+                    <option value="read-only">👁️ 只读 (Read-Only)</option>
+                  </select>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <div style="margin-top:16px;">
+          <button id="nu-submit" class="btn-primary">＋ 创建用户并分配权限</button>
         </div>
       </div>
       <div id="users-table-wrap"></div>
     `;
 
+    $('#nu-select-all-vaults')?.addEventListener('click', () => {
+      document.querySelectorAll('.nu-vault-check').forEach((chk) => { chk.checked = true; });
+    });
+    $('#nu-clear-vaults')?.addEventListener('click', () => {
+      document.querySelectorAll('.nu-vault-check').forEach((chk) => { chk.checked = false; });
+    });
+
     $('#nu-submit').onclick = async () => {
       const username = $('#nu-username').value.trim();
       const password = $('#nu-password').value;
       const role = $('#nu-admin').checked ? 'admin' : 'user';
-      if (!username || !password) return;
+      if (!username || !password) {
+        toast('请填写用户名与密码');
+        return;
+      }
+
+      const vaultAssignments = [];
+      document.querySelectorAll('.nu-vault-check:checked').forEach((chk) => {
+        const vaultId = chk.dataset.vaultId;
+        const permSelect = document.querySelector(`.nu-vault-perm[data-vault-id="${vaultId}"]`);
+        const permission = permSelect ? permSelect.value : 'read-write';
+        vaultAssignments.push({ vaultId, permission });
+      });
+
       try {
         await api('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password, role }),
+          body: JSON.stringify({ username, password, role, vaultAssignments }),
         });
-        toast('用户创建成功');
+        toast(vaultAssignments.length > 0 ? `用户创建成功，已分配 ${vaultAssignments.length} 个 Vault 权限` : '用户创建成功');
         renderUsersPanel();
       } catch (e) {
         toast('创建失败: ' + e.message);
@@ -1836,27 +2118,51 @@
         <tr>
           <th>用户名</th>
           <th>角色</th>
+          <th>授权笔记库 (Vaults)</th>
           <th>创建时间</th>
           <th style="text-align:right">操作</th>
         </tr>
       </thead>
-      <tbody></tbody>
+      <tbody id="admin-users-tbody"></tbody>
     `;
-    const tbody = table.querySelector('tbody');
+    const tbody = table.querySelector('#admin-users-tbody');
 
-    for (const u of body.users) {
+    for (const u of usersList) {
       const tr = document.createElement('tr');
+      const memberships = u.memberships || [];
+      const owned = u.ownedVaults || [];
+
+      let vaultsBadgeHtml = '';
+      if (owned.length > 0) {
+        vaultsBadgeHtml += owned.map((v) => `<span class="badge primary" style="font-size:10.5px;margin:2px;" title="所有者">👑 ${escapeHtml(v.vaultName)}</span>`).join(' ');
+      }
+      if (memberships.length > 0) {
+        vaultsBadgeHtml += (vaultsBadgeHtml ? ' ' : '') + memberships.map((m) => {
+          const isRw = m.permission === 'read-write';
+          return `<span class="badge ${isRw ? 'success' : 'warning'}" style="font-size:10.5px;margin:2px;" title="${isRw ? '读写' : '只读'}">${isRw ? '✏️' : '👁️'} ${escapeHtml(m.vaultName)}</span>`;
+        }).join(' ');
+      }
+      if (!vaultsBadgeHtml) {
+        vaultsBadgeHtml = '<span style="font-size:12px;color:var(--muted)">暂无关联 Vault</span>';
+      }
+
       tr.innerHTML = `
-        <td><b>${escapeHtml(u.username)}</b></td>
-        <td><span class="badge">${u.role}</span></td>
+        <td><b>👤 ${escapeHtml(u.username)}</b></td>
+        <td><span class="badge ${u.role === 'admin' ? 'primary' : ''}">${u.role === 'admin' ? '管理员' : '普通用户'}</span></td>
+        <td style="max-width:320px;">${vaultsBadgeHtml}</td>
         <td class="meta">${new Date(u.createdAt).toLocaleString()}</td>
-        <td class="actions"></td>
+        <td class="actions" style="text-align:right">
+          <button class="secondary edit-user-vaults-btn" data-user-id="${u.id}" style="font-size:12px;padding:4px 10px;">📂 权限配置</button>
+        </td>
       `;
+
+      tr.querySelector('.edit-user-vaults-btn').onclick = () => openUserVaultsModal(u);
 
       if (u.id !== state.user.id) {
         const del = document.createElement('button');
         del.textContent = '删除';
         del.className = 'danger';
+        del.style.cssText = 'font-size:12px;padding:4px 10px;margin-left:6px;';
         del.onclick = async () => {
           if (!confirm(`确定删除用户 "${u.username}"？`)) return;
           await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
@@ -1869,6 +2175,118 @@
     wrap.appendChild(table);
   }
 
+  // --------------------------- Modal: User Vault Permissions -----------------
+
+  async function openUserVaultsModal(targetUser) {
+    let modal = $('#user-vaults-modal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'user-vaults-modal';
+    modal.className = 'modal-backdrop';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(3px);padding:16px;';
+    modal.innerHTML = `
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);width:100%;max-width:540px;padding:24px;box-shadow:0 12px 36px rgba(0,0,0,0.4);max-height:85vh;display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px;">
+          <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:6px;">
+            <span>📂</span>
+            <span>配置用户 Vault 访问权限: <b>${escapeHtml(targetUser.username)}</b></span>
+          </h3>
+          <button id="modal-close-btn" class="secondary" style="padding:4px 8px;font-size:12px;">✕</button>
+        </div>
+        <div id="modal-vaults-content" style="flex:1;overflow-y:auto;padding-right:4px;">
+          <div class="empty-state">加载中…</div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+          <span style="font-size:12px;color:var(--muted);">支持分配多个笔记库的只读或读写权限</span>
+          <div style="display:flex;gap:8px;">
+            <button id="modal-cancel-btn" class="secondary">取消</button>
+            <button id="modal-save-btn" class="btn-primary">保存修改</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => modal.remove();
+    modal.querySelector('#modal-close-btn').onclick = close;
+    modal.querySelector('#modal-cancel-btn').onclick = close;
+    modal.onclick = (e) => { if (e.target === modal) close(); };
+
+    try {
+      const res = await api(`/api/admin/users/${targetUser.id}/vaults`);
+      const { vaults } = await res.json();
+      const content = modal.querySelector('#modal-vaults-content');
+
+      if (!vaults || vaults.length === 0) {
+        content.innerHTML = '<div class="empty-state">系统内暂无 Vault</div>';
+        return;
+      }
+
+      content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${vaults.map((v) => {
+            const isOwner = v.isOwner;
+            const isAssigned = v.assigned;
+            const isRw = v.permission === 'read-write';
+
+            return `
+              <div class="modal-vault-row" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:${isOwner ? 'default' : 'pointer'};flex:1;overflow:hidden;">
+                  <input type="checkbox" class="m-vault-chk" data-vault-id="${v.id}" ${isAssigned ? 'checked' : ''} ${isOwner ? 'disabled' : ''} />
+                  <div style="overflow:hidden;">
+                    <div style="font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+                      <span>📓 ${escapeHtml(v.name)}</span>
+                      ${isOwner ? '<span class="badge primary" style="font-size:10px;">所有者</span>' : ''}
+                    </div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:2px;">ID: ${v.id}</div>
+                  </div>
+                </label>
+                <div>
+                  ${isOwner ? `
+                    <span class="badge primary" style="font-size:11px;">全部权限</span>
+                  ` : `
+                    <select class="m-vault-perm" data-vault-id="${v.id}" style="padding:4px 8px;font-size:12px;border-radius:4px;margin:0;">
+                      <option value="read-write" ${isRw ? 'selected' : ''}>✏️ 读写 (Read-Write)</option>
+                      <option value="read-only" ${!isRw ? 'selected' : ''}>👁️ 只读 (Read-Only)</option>
+                    </select>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      modal.querySelector('#modal-save-btn').onclick = async () => {
+        const vaultAssignments = [];
+        modal.querySelectorAll('.m-vault-chk:checked').forEach((chk) => {
+          if (chk.disabled) return; // Skip owner
+          const vaultId = chk.dataset.vaultId;
+          const permSelect = modal.querySelector(`.m-vault-perm[data-vault-id="${vaultId}"]`);
+          const permission = permSelect ? permSelect.value : 'read-write';
+          vaultAssignments.push({ vaultId, permission });
+        });
+
+        try {
+          await api(`/api/admin/users/${targetUser.id}/vaults`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vaultAssignments }),
+          });
+          toast(`已更新 "${targetUser.username}" 的 Vault 权限`);
+          close();
+          renderUsersPanel();
+        } catch (e) {
+          toast('保存失败: ' + e.message);
+        }
+      };
+    } catch (e) {
+      modal.querySelector('#modal-vaults-content').innerHTML = `<div class="empty-state">加载失败: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
   async function renderAllVaultsPanel() {
     mainPanel.innerHTML = '<div class="empty-state">加载 Vault 列表中…</div>';
     const res = await api('/api/admin/vaults');
@@ -1876,7 +2294,7 @@
 
     mainPanel.innerHTML = `
       <div class="panel-header">
-        <h2>📚 全局 Vault 状态</h2>
+        <h2>📚 全局 Vault 状态与管理</h2>
       </div>
       <div id="all-vaults-wrap"></div>
     `;
@@ -1891,6 +2309,7 @@
           <th>所有者</th>
           <th>Vault ID</th>
           <th>创建时间</th>
+          <th style="text-align:right">操作</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -1901,10 +2320,16 @@
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><b>📓 ${escapeHtml(v.name)}</b></td>
-        <td>${escapeHtml(v.ownerUsername)}</td>
+        <td><span class="badge">👤 ${escapeHtml(v.ownerUsername)}</span></td>
         <td class="meta"><code>${v.id}</code></td>
         <td class="meta">${new Date(v.createdAt).toLocaleString()}</td>
+        <td class="actions" style="text-align:right">
+          <button class="secondary open-vault-btn" data-vault-id="${v.id}">打开浏览</button>
+          <button class="btn-primary manage-perm-btn" data-vault-id="${v.id}">👥 权限设置</button>
+        </td>
       `;
+      tr.querySelector('.open-vault-btn').onclick = () => openVault(v.id, 'files');
+      tr.querySelector('.manage-perm-btn').onclick = () => openVault(v.id, 'permissions');
       tbody.appendChild(tr);
     }
     wrap.appendChild(table);
