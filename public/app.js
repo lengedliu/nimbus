@@ -1,8 +1,26 @@
 (function () {
   'use strict';
 
+  function normalizeServerUrl(raw) {
+    if (!raw || !raw.trim()) return window.location.origin;
+    let url = raw.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      url = window.location.protocol + '//' + url;
+    }
+    try {
+      const parsed = new URL(url);
+      // If user typed the current hostname but forgot to add the port (e.g. typed 192.168.50.154 while browsing on 192.168.50.154:8787)
+      if (parsed.hostname === window.location.hostname && !parsed.port && window.location.port) {
+        parsed.port = window.location.port;
+      }
+      return parsed.origin;
+    } catch {
+      return window.location.origin;
+    }
+  }
+
   const state = {
-    serverBase: localStorage.getItem('nimbus_server') || window.location.origin,
+    serverBase: normalizeServerUrl(localStorage.getItem('nimbus_server') || window.location.origin),
     token: localStorage.getItem('nimbus_token') || '',
     user: JSON.parse(localStorage.getItem('nimbus_user') || 'null'),
     vaults: [],
@@ -119,7 +137,7 @@
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const serverInput = $('#login-server').value.trim();
-    if (serverInput) state.serverBase = serverInput;
+    state.serverBase = normalizeServerUrl(serverInput);
     const username = $('#login-username').value.trim();
     const password = $('#login-password').value;
     $('#login-error').textContent = '';
@@ -3105,7 +3123,7 @@
     checkAuthStatus();
     $('#login-server').addEventListener('change', () => {
       const serverInput = $('#login-server').value.trim();
-      state.serverBase = serverInput || window.location.origin;
+      state.serverBase = normalizeServerUrl(serverInput);
       checkAuthStatus();
     });
   }
