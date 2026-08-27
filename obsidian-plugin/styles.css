@@ -1,0 +1,6 @@
+/* Nimbus Sync Plugin Styles */
+.status-bar-item.plugin-nimbus-sync {
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}

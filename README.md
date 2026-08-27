@@ -10,14 +10,18 @@
 - 🕘 **笔记历史版本** — 每次覆盖笔记前自动存一份旧版本快照，随时能看历史、恢复到某个版本
 - 🗑 **回收站** — 删除是软删除，误删了能恢复，不是真的马上没了
 
-配套的 Obsidian 插件在 [`fns-obsidian-plugin`](../fns-obsidian-plugin) 目录（插件本身不需要改，
-接口路径没变）。
+配套的 Obsidian 插件已内置在仓库的 [`obsidian-plugin`](./obsidian-plugin) 目录中。
 
 ## 目录结构
 
 ```
 nimbus-server/
 ├── server.js                # 入口：REST API + WebSocket + MCP 端点 + 管理后台静态资源
+├── obsidian-plugin/         # 配套 Obsidian 双向同步插件 (可直接复制到 .obsidian/plugins/nimbus-sync)
+│   ├── manifest.json
+│   ├── main.js
+│   ├── styles.css
+│   └── README.md
 ├── src/
 │   ├── config.js
 │   ├── jsonDb.js
