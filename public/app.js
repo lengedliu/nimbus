@@ -39,6 +39,80 @@
   const modalBackdrop = $('#modal-backdrop');
   const modalContainer = $('#modal-container');
 
+  const THEME_LABELS = {
+    default: '经典科技蓝',
+    obsidian: 'Obsidian 紫魅夜',
+    emerald: '翡翠极光绿',
+    azure: '深海蔚蓝',
+    rose: '琥珀丝绒红',
+    mono: 'OLED 纯黑极简',
+    light: '明亮白昼',
+  };
+
+  const THEME_DOT_COLORS = {
+    default: '#58a6ff',
+    obsidian: '#9d7cd8',
+    emerald: '#10b981',
+    azure: '#0284c7',
+    rose: '#e11d48',
+    mono: '#ffffff',
+    light: '#2563eb',
+  };
+
+  function applyTheme(themeKey) {
+    const key = themeKey || localStorage.getItem('nimbus_theme') || 'default';
+    if (key === 'default') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', key);
+    }
+    localStorage.setItem('nimbus_theme', key);
+    updateThemeUI(key);
+  }
+
+  function updateThemeUI(themeKey) {
+    const key = themeKey || localStorage.getItem('nimbus_theme') || 'default';
+    const label = $('#theme-label-name');
+    const dot = $('#theme-color-dot');
+    if (label) label.textContent = THEME_LABELS[key] || '经典科技蓝';
+    if (dot) {
+      dot.style.backgroundColor = THEME_DOT_COLORS[key] || '#58a6ff';
+      dot.style.boxShadow = `0 0 6px ${THEME_DOT_COLORS[key] || '#58a6ff'}`;
+    }
+    document.querySelectorAll('.theme-opt-item').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.themeVal === key);
+    });
+  }
+
+  function initThemeSwitcher() {
+    const menuBtn = $('#theme-menu-btn');
+    const menu = $('#theme-dropdown-menu');
+    if (!menuBtn || !menu) return;
+
+    menuBtn.onclick = (e) => {
+      e.stopPropagation();
+      menu.classList.toggle('hidden');
+    };
+
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && e.target !== menuBtn) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    document.querySelectorAll('.theme-opt-item').forEach((item) => {
+      item.onclick = (e) => {
+        e.stopPropagation();
+        const val = item.dataset.themeVal;
+        applyTheme(val);
+        menu.classList.add('hidden');
+        toast(`已切换至「${THEME_LABELS[val]}」风格`);
+      };
+    });
+
+    applyTheme(localStorage.getItem('nimbus_theme') || 'default');
+  }
+
   // --------------------------- API helper -----------------------------------
 
   async function api(path, opts = {}) {
@@ -172,6 +246,7 @@
   async function enterApp() {
     loginView.classList.add('hidden');
     appView.classList.remove('hidden');
+    initThemeSwitcher();
     $('#who-username').textContent = state.user.username;
     $('#who-role').textContent = state.user.role;
     if (state.user.role === 'admin') $('#admin-nav').classList.remove('hidden');
@@ -3059,12 +3134,76 @@
         }
       });
     } else if (subTab === 'account') {
-      // 5. Account and password management tab
+      // 5. Account, appearance & password management tab
+      const currentTheme = localStorage.getItem('nimbus_theme') || 'default';
       container.innerHTML = `
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3><span>👤</span> 个人账户与安全设置</h3>
-            <p>查看登录身份信息并修改密码</p>
+            <h3><span>🎨</span> 后台管理界面主题风格与配色</h3>
+            <p>选择您喜欢的后台配色风格，支持实时切换并自动保存偏好</p>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:12px;margin-bottom:28px;">
+            <div class="theme-card-picker ${currentTheme === 'default' ? 'selected' : ''}" data-val="default" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'default' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px #58a6ff;flex-shrink:0;"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">经典科技蓝</div>
+                <div style="font-size:11px;color:var(--muted)">默认深色极客风</div>
+              </div>
+            </div>
+
+            <div class="theme-card-picker ${currentTheme === 'obsidian' ? 'selected' : ''}" data-val="obsidian" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'obsidian' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#9d7cd8;box-shadow:0 0 8px #9d7cd8;flex-shrink:0;"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">Obsidian 紫魅夜</div>
+                <div style="font-size:11px;color:var(--muted)">Obsidian 官方经典紫</div>
+              </div>
+            </div>
+
+            <div class="theme-card-picker ${currentTheme === 'emerald' ? 'selected' : ''}" data-val="emerald" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'emerald' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;flex-shrink:0;"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">翡翠极光绿</div>
+                <div style="font-size:11px;color:var(--muted)">深邃护眼森系绿</div>
+              </div>
+            </div>
+
+            <div class="theme-card-picker ${currentTheme === 'azure' ? 'selected' : ''}" data-val="azure" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'azure' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#0284c7;box-shadow:0 0 8px #0284c7;flex-shrink:0;"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">深海蔚蓝</div>
+                <div style="font-size:11px;color:var(--muted)">清澈深蓝海洋风</div>
+              </div>
+            </div>
+
+            <div class="theme-card-picker ${currentTheme === 'rose' ? 'selected' : ''}" data-val="rose" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'rose' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#e11d48;box-shadow:0 0 8px #e11d48;flex-shrink:0;"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">琥珀丝绒红</div>
+                <div style="font-size:11px;color:var(--muted)">暖意轻奢丝绒酒红</div>
+              </div>
+            </div>
+
+            <div class="theme-card-picker ${currentTheme === 'mono' ? 'selected' : ''}" data-val="mono" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'mono' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#ffffff;box-shadow:0 0 8px #ffffff;flex-shrink:0;"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">OLED 纯黑极简</div>
+                <div style="font-size:11px;color:var(--muted)">纯黑超高对比度</div>
+              </div>
+            </div>
+
+            <div class="theme-card-picker ${currentTheme === 'light' ? 'selected' : ''}" data-val="light" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'light' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#2563eb;flex-shrink:0;"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">明亮白昼 (Light)</div>
+                <div style="font-size:11px;color:var(--muted)">清新日间高清晰</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-card-header">
+            <h3><span>👤</span> 个人账户信息</h3>
+            <p>查看当前登录用户凭证</p>
           </div>
 
           <div style="display:grid;grid-template-columns:120px 1fr;gap:10px 14px;font-size:13.5px;margin-bottom:24px;background:var(--panel-2);padding:16px;border-radius:var(--radius);border:1px solid var(--border);">
@@ -3094,6 +3233,23 @@
               <span>确认新密码 (Confirm New Password)</span>
               <input type="password" id="confirm-password" required autocomplete="new-password" placeholder="再次输入新密码" minlength="4" />
             </label>
+
+            <div id="password-change-result" style="margin:10px 0;"></div>
+
+            <button type="submit" class="btn-primary" style="margin-top:8px;">确认修改密码</button>
+          </form>
+        </div>
+      `;
+
+      // Bind Theme Cards in settings
+      container.querySelectorAll('.theme-card-picker').forEach((card) => {
+        card.addEventListener('click', () => {
+          const val = card.dataset.val;
+          applyTheme(val);
+          toast(`已切换至「${THEME_LABELS[val]}」风格`);
+          renderSettingsPanel('account');
+        });
+      });
 
             <div id="password-change-result" style="margin:10px 0;"></div>
 
@@ -3156,6 +3312,8 @@
   }
 
   // --------------------------- Boot ------------------------------------------
+
+  applyTheme();
 
   if (state.token && state.user) {
     enterApp().catch(() => {

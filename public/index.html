@@ -49,6 +49,45 @@
       </div>
     </div>
     <div class="who">
+      <!-- Theme Switcher Selector -->
+      <div class="theme-picker-wrap" id="theme-picker-container">
+        <button id="theme-menu-btn" class="theme-menu-btn" title="切换后台主题与配色">
+          <span class="theme-color-dot" id="theme-color-dot"></span>
+          <span id="theme-label-name">默认科技蓝</span>
+          <span style="font-size:10px;opacity:0.7;">▼</span>
+        </button>
+        <div id="theme-dropdown-menu" class="theme-dropdown-menu hidden">
+          <button class="theme-opt-item" data-theme-val="default">
+            <span class="dot" style="background:#58a6ff;box-shadow:0 0 6px #58a6ff;"></span>
+            <span>经典科技蓝 (默认)</span>
+          </button>
+          <button class="theme-opt-item" data-theme-val="obsidian">
+            <span class="dot" style="background:#9d7cd8;box-shadow:0 0 6px #9d7cd8;"></span>
+            <span>Obsidian 紫魅夜</span>
+          </button>
+          <button class="theme-opt-item" data-theme-val="emerald">
+            <span class="dot" style="background:#10b981;box-shadow:0 0 6px #10b981;"></span>
+            <span>翡翠极光绿</span>
+          </button>
+          <button class="theme-opt-item" data-theme-val="azure">
+            <span class="dot" style="background:#0284c7;box-shadow:0 0 6px #0284c7;"></span>
+            <span>深海蔚蓝</span>
+          </button>
+          <button class="theme-opt-item" data-theme-val="rose">
+            <span class="dot" style="background:#e11d48;box-shadow:0 0 6px #e11d48;"></span>
+            <span>琥珀丝绒红</span>
+          </button>
+          <button class="theme-opt-item" data-theme-val="mono">
+            <span class="dot" style="background:#ffffff;box-shadow:0 0 6px #ffffff;"></span>
+            <span>OLED 纯黑极简</span>
+          </button>
+          <button class="theme-opt-item" data-theme-val="light">
+            <span class="dot" style="background:#2563eb;"></span>
+            <span>明亮白昼 (Light)</span>
+          </button>
+        </div>
+      </div>
+
       <span id="who-username" class="user-pill"></span>
       <span id="who-role" class="badge"></span>
       <button id="logout-btn" class="ghost">退出</button>
