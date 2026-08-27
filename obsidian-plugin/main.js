@@ -62,9 +62,15 @@ module.exports = class NimbusSyncPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('delete', (file) => this.onLocalFileDelete(file)));
     this.registerEvent(this.app.vault.on('rename', (file, oldPath) => this.onLocalFileRename(file, oldPath)));
 
-    // Auto connect on startup
-    if (this.settings.autoSync && this.settings.token && this.settings.vaultId) {
-      this.connectWebSocket();
+    // Auto connect or auto-bind on startup
+    if (this.settings.autoSync && this.settings.token) {
+      if (this.settings.vaultId) {
+        this.connectWebSocket();
+      } else {
+        this.autoMatchOrCreateVault().then(() => {
+          if (this.settings.vaultId) this.connectWebSocket();
+        });
+      }
     }
   }
 
@@ -106,6 +112,40 @@ module.exports = class NimbusSyncPlugin extends Plugin {
   }
 
   // --- API Authentication & Vaults ---
+  async autoMatchOrCreateVault() {
+    if (!this.settings.token) return null;
+    const localVaultName = this.app.vault.getName() || 'DefaultVault';
+    const vaults = await this.fetchVaults();
+
+    // 1. Check if server already has a vault matching current local vault name
+    let targetVault = vaults.find(v => v.name.toLowerCase() === localVaultName.toLowerCase());
+
+    // 2. If not matched, check if current settings vault exists
+    if (!targetVault && this.settings.vaultId) {
+      targetVault = vaults.find(v => v.id === this.settings.vaultId);
+    }
+
+    // 3. If still no vault or server has 0 vaults, auto-create one matching local vault name!
+    if (!targetVault) {
+      if (vaults.length === 0) {
+        new Notice(`☁️ 服务端暂无 Vault，正在自动为您创建并绑定「${localVaultName}」...`);
+        targetVault = await this.createVault(localVaultName);
+      } else {
+        // Use first vault or auto-create local vault
+        targetVault = vaults[0];
+      }
+    }
+
+    if (targetVault) {
+      this.settings.vaultId = targetVault.id;
+      this.settings.vaultName = targetVault.name;
+      await this.saveSettings();
+      new Notice(`🎯 已自动加载并绑定知识库:「${targetVault.name}」`);
+    }
+
+    return targetVault;
+  }
+
   async login() {
     const baseUrl = this.getCleanServerUrl();
     if (!baseUrl) {
@@ -132,10 +172,15 @@ module.exports = class NimbusSyncPlugin extends Plugin {
       this.settings.token = data.token;
       await this.saveSettings();
 
-      // Fetch user's vaults
-      await this.fetchVaults();
-
       new Notice('✅ 成功登录到 Nimbus 服务器！');
+
+      // Automatically detect, match or create vault for the current local vault!
+      await this.autoMatchOrCreateVault();
+
+      if (this.settings.vaultId && this.settings.autoSync) {
+        this.connectWebSocket();
+      }
+
       return true;
     } catch (e) {
       new Notice(`❌ 登录失败: ${e.message}`);
@@ -554,13 +599,32 @@ class NimbusSettingTab extends PluginSettingTab {
           }
         }));
 
-    // 6. Vault Selection
+    // 6. Local Vault Detection & Cloud Vault Selection
     if (this.plugin.settings.token) {
-      const vaults = await this.plugin.fetchVaults();
+      const localVaultName = this.app.vault.getName() || 'DefaultVault';
       
+      // Auto-ensure matching vault if not selected
+      if (!this.plugin.settings.vaultId) {
+        await this.plugin.autoMatchOrCreateVault();
+      }
+
+      const vaults = await this.plugin.fetchVaults();
+
+      // Show local Vault notice
+      new Setting(containerEl)
+        .setName('📍 本地知识库 (Local Vault)')
+        .setDesc(`当前检测到本地 Vault:「${localVaultName}」`)
+        .addButton(btn => btn
+          .setButtonText('🔄 自动重新匹配')
+          .onClick(async () => {
+            await this.plugin.autoMatchOrCreateVault();
+            await this.display();
+          }));
+
+      // Cloud Vault selection
       const vaultSetting = new Setting(containerEl)
-        .setName('同步存储库 (Vault)')
-        .setDesc('选择要绑定同步的云端知识库');
+        .setName('☁️ 云端同步存储库 (Cloud Vault)')
+        .setDesc('选择当前本地库绑定的云端存储库');
 
       if (vaults.length > 0) {
         vaultSetting.addDropdown(dd => {
@@ -575,22 +639,33 @@ class NimbusSettingTab extends PluginSettingTab {
           });
         });
       } else {
-        vaultSetting.setDesc('当前账号下暂无 Vault，请在下方创建');
+        vaultSetting.setDesc('当前账号下暂无 Vault，系统将自动创建');
       }
+
+      // One-click Push All Notes
+      new Setting(containerEl)
+        .setName('🚀 立即全量双向同步')
+        .setDesc('检查本地所有笔记与附件，自动上传云端缺失文件并下载云端更新')
+        .addButton(btn => btn
+          .setButtonText('立即同步所有本地笔记')
+          .setCta()
+          .onClick(async () => {
+            await this.plugin.fullSyncAllFiles();
+          }));
 
       // Add Create Vault option
       new Setting(containerEl)
         .setName('新建云端 Vault')
-        .setDesc('直接在服务器上创建一个新的笔记库')
+        .setDesc('在服务器上手动创建一个新的笔记库')
         .addText(text => {
-          text.setPlaceholder('Vault 命名 (如: MyNotes)');
+          text.setPlaceholder(`Vault 命名 (默认: ${localVaultName})`);
+          text.setValue(localVaultName);
           this.newVaultInput = text;
         })
         .addButton(btn => btn
           .setButtonText('创建并绑定')
           .onClick(async () => {
-            const name = this.newVaultInput.getValue().trim();
-            if (!name) return new Notice('请输入 Vault 名称');
+            const name = this.newVaultInput.getValue().trim() || localVaultName;
             const created = await this.plugin.createVault(name);
             if (created) {
               this.plugin.settings.vaultId = created.id;
