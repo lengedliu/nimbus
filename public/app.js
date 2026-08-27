@@ -248,6 +248,7 @@
     renderVaultList();
     if (tab === 'settings') renderSettingsPanel();
     if (tab === 'database') renderDatabasePanel();
+    if (tab === 'synclogs') renderAdminSyncLogsPanel();
     if (tab === 'users') renderUsersPanel();
     if (tab === 'all-vaults') renderAllVaultsPanel();
   }
@@ -401,6 +402,7 @@
     subtabsBar.innerHTML = `
       <button class="subtab-btn ${state.activeSubtab === 'files' ? 'active' : ''}" data-sub="files">📄 笔记与文件</button>
       <button class="subtab-btn ${state.activeSubtab === 'stats' ? 'active' : ''}" data-sub="stats">📊 统计与监控</button>
+      <button class="subtab-btn ${state.activeSubtab === 'synclogs' ? 'active' : ''}" data-sub="synclogs">📋 同步日志</button>
       <button class="subtab-btn ${state.activeSubtab === 'shares' ? 'active' : ''}" data-sub="shares">🔗 公开分享</button>
       <button class="subtab-btn ${state.activeSubtab === 'rules' ? 'active' : ''}" data-sub="rules">⚙️ 同步规则</button>
       <button class="subtab-btn ${state.activeSubtab === 'trash' ? 'active' : ''}" data-sub="trash">🗑️ 回收站</button>
@@ -430,6 +432,7 @@
     // Render active subtab
     if (state.activeSubtab === 'files') renderFilesSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'stats') renderStatsSubtab(vaultId, contentBox);
+    else if (state.activeSubtab === 'synclogs') renderVaultSyncLogsSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'shares') renderSharesSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'rules') renderRulesSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'trash') renderTrashSubtab(vaultId, contentBox);
@@ -1001,6 +1004,313 @@
       tbody.appendChild(tr);
     }
     wrap.appendChild(table);
+  }
+
+  // --------------------------- Subtab: Sync Logs (Vault Level) --------------
+
+  async function renderVaultSyncLogsSubtab(vaultId, container) {
+    container.innerHTML = '<div class="empty-state">加载同步日志中…</div>';
+
+    let currentAction = '';
+    let currentStatus = '';
+    let currentSearch = '';
+
+    async function loadLogs() {
+      const q = new URLSearchParams();
+      if (currentAction) q.set('action', currentAction);
+      if (currentStatus) q.set('status', currentStatus);
+      if (currentSearch) q.set('search', currentSearch);
+      q.set('limit', '80');
+
+      const res = await api(`/api/vaults/${vaultId}/sync-logs?${q.toString()}`);
+      const data = await res.json();
+      renderUI(data);
+    }
+
+    function renderUI(data) {
+      const logs = data.logs || [];
+      container.innerHTML = `
+        <div class="panel-header" style="margin-bottom:12px;">
+          <div>
+            <h3 style="margin:0;font-size:16px;">📋 笔记同步日志 (Sync Logs)</h3>
+            <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">实时追踪与审计所有设备客户端的推送、拉取、冲突、删除等同步记录 (共 ${data.total || 0} 条)</div>
+          </div>
+          <div class="sync-logs-actions">
+            <button class="secondary" id="sync-logs-refresh-btn">🔄 刷新</button>
+            ${logs.length > 0 ? `<button class="danger" id="sync-logs-clear-btn">🗑️ 清空此库日志</button>` : ''}
+          </div>
+        </div>
+
+        <div class="sync-logs-controls">
+          <div class="sync-logs-filters">
+            <select id="log-filter-action">
+              <option value="">全部同步动作 (All Actions)</option>
+              <option value="update" ${currentAction === 'update' ? 'selected' : ''}>📝 更新 / 推送 (Push/Update)</option>
+              <option value="pull" ${currentAction === 'pull' ? 'selected' : ''}>📥 读取 / 拉取 (Pull)</option>
+              <option value="conflict" ${currentAction === 'conflict' ? 'selected' : ''}>⚠️ 冲突副本 (Conflict)</option>
+              <option value="delete" ${currentAction === 'delete' ? 'selected' : ''}>🗑️ 删除文件 (Delete)</option>
+              <option value="ignore" ${currentAction === 'ignore' ? 'selected' : ''}>🚫 规则忽略 (Ignored)</option>
+              <option value="error" ${currentAction === 'error' ? 'selected' : ''}>❌ 异常错误 (Error)</option>
+            </select>
+
+            <select id="log-filter-status">
+              <option value="">全部状态 (All Status)</option>
+              <option value="success" ${currentStatus === 'success' ? 'selected' : ''}>✓ 成功 (Success)</option>
+              <option value="conflict" ${currentStatus === 'conflict' ? 'selected' : ''}>⚠️ 冲突 (Conflict)</option>
+              <option value="error" ${currentStatus === 'error' ? 'selected' : ''}>✕ 错误 (Error)</option>
+              <option value="ignored" ${currentStatus === 'ignored' ? 'selected' : ''}>- 忽略 (Ignored)</option>
+            </select>
+
+            <input type="text" id="log-filter-search" placeholder="搜索文件名、路径或设备名…" value="${escapeHtml(currentSearch)}" style="width:200px;" />
+            <button class="secondary" id="log-search-btn">🔍 筛选</button>
+          </div>
+        </div>
+
+        <div class="sync-logs-table-wrap">
+          <table class="data-table" style="width:100%;">
+            <thead>
+              <tr>
+                <th style="width:140px;">时间戳</th>
+                <th style="width:90px;">动作</th>
+                <th>笔记 / 文件路径</th>
+                <th style="width:80px;">大小</th>
+                <th style="width:130px;">客户端设备 / IP</th>
+                <th style="width:80px;">状态</th>
+                <th>详细说明</th>
+              </tr>
+            </thead>
+            <tbody id="sync-logs-tbody"></tbody>
+          </table>
+        </div>
+      `;
+
+      // Event bindings
+      container.querySelector('#sync-logs-refresh-btn').onclick = () => loadLogs();
+      container.querySelector('#log-search-btn').onclick = () => {
+        currentAction = container.querySelector('#log-filter-action').value;
+        currentStatus = container.querySelector('#log-filter-status').value;
+        currentSearch = container.querySelector('#log-filter-search').value.trim();
+        loadLogs();
+      };
+      container.querySelector('#log-filter-action').onchange = () => {
+        currentAction = container.querySelector('#log-filter-action').value;
+        loadLogs();
+      };
+      container.querySelector('#log-filter-status').onchange = () => {
+        currentStatus = container.querySelector('#log-filter-status').value;
+        loadLogs();
+      };
+      container.querySelector('#log-filter-search').onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          currentSearch = container.querySelector('#log-filter-search').value.trim();
+          loadLogs();
+        }
+      };
+
+      const clearBtn = container.querySelector('#sync-logs-clear-btn');
+      if (clearBtn) {
+        clearBtn.onclick = async () => {
+          if (!confirm('确定清空当前 Vault 的所有同步日志记录？此操作不会影响任何笔记内容。')) return;
+          await api(`/api/vaults/${vaultId}/sync-logs`, { method: 'DELETE' });
+          toast('同步日志已清空');
+          loadLogs();
+        };
+      }
+
+      const tbody = container.querySelector('#sync-logs-tbody');
+      if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">暂无符合条件的同步日志</td></tr>`;
+        return;
+      }
+
+      for (const item of logs) {
+        const tr = document.createElement('tr');
+        const actionMap = {
+          update: { label: '更新', cls: 'update' },
+          pull: { label: '拉取', cls: 'pull' },
+          delete: { label: '删除', cls: 'delete' },
+          conflict: { label: '冲突', cls: 'conflict' },
+          ignore: { label: '忽略', cls: 'ignore' },
+          error: { label: '错误', cls: 'error' },
+        };
+        const actInfo = actionMap[item.action] || { label: item.action, cls: 'pull' };
+
+        const statusIcon = item.status === 'success' ? '✓ 成功' : item.status === 'conflict' ? '⚠️ 冲突' : item.status === 'error' ? '✕ 失败' : '- 忽略';
+        const statusClass = item.status || 'success';
+
+        tr.innerHTML = `
+          <td class="meta" style="font-size:12px;">${new Date(item.timestamp).toLocaleString()}</td>
+          <td><span class="sync-log-badge ${actInfo.cls}">${actInfo.label}</span></td>
+          <td><b style="font-family:ui-monospace,monospace;font-size:12.5px;">${escapeHtml(item.path)}</b></td>
+          <td class="meta" style="font-size:12px;">${item.size ? formatBytes(item.size) : '-'}</td>
+          <td class="meta" style="font-size:12px;" title="${escapeHtml(item.clientIp || '')}">
+            <span>💻 ${escapeHtml(item.deviceName || 'Web/REST')}</span>
+          </td>
+          <td><span class="sync-log-status ${statusClass}">${statusIcon}</span></td>
+          <td style="font-size:12px;color:var(--text-secondary);">${escapeHtml(item.detail || '')}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    await loadLogs();
+  }
+
+  // --------------------------- Admin Sync Logs Panel ------------------------
+
+  async function renderAdminSyncLogsPanel() {
+    mainPanel.innerHTML = '<div class="empty-state">加载全局同步日志中…</div>';
+
+    let currentAction = '';
+    let currentStatus = '';
+    let currentSearch = '';
+    let currentVaultFilter = '';
+
+    async function loadLogs() {
+      const q = new URLSearchParams();
+      if (currentAction) q.set('action', currentAction);
+      if (currentStatus) q.set('status', currentStatus);
+      if (currentSearch) q.set('search', currentSearch);
+      if (currentVaultFilter) q.set('vaultId', currentVaultFilter);
+      q.set('limit', '100');
+
+      const res = await api(`/api/admin/sync-logs?${q.toString()}`);
+      const data = await res.json();
+      renderUI(data);
+    }
+
+    function renderUI(data) {
+      const logs = data.logs || [];
+      const vaultOptions = state.vaults.map((v) => `<option value="${v.id}" ${v.id === currentVaultFilter ? 'selected' : ''}>${escapeHtml(v.name)}</option>`).join('');
+
+      mainPanel.innerHTML = `
+        <div class="panel-header" style="margin-bottom:12px;">
+          <div>
+            <h2 style="margin:0 0 4px;font-size:20px;display:flex;align-items:center;gap:10px;">
+              <span>📋</span>
+              <span>全局笔记同步日志 (Global Sync Logs)</span>
+            </h2>
+            <div style="font-size:13px;color:var(--muted)">监控审计所有客户端在所有 Vault 上的实时同步活动记录 (共 ${data.total || 0} 条)</div>
+          </div>
+          <div class="sync-logs-actions">
+            <button class="secondary" id="admin-logs-refresh-btn">🔄 刷新数据</button>
+          </div>
+        </div>
+
+        <div class="sync-logs-controls">
+          <div class="sync-logs-filters">
+            <select id="admin-log-filter-vault">
+              <option value="">全部 Vault (All Vaults)</option>
+              ${vaultOptions}
+            </select>
+
+            <select id="admin-log-filter-action">
+              <option value="">全部同步动作 (All Actions)</option>
+              <option value="update" ${currentAction === 'update' ? 'selected' : ''}>📝 更新 / 推送 (Push/Update)</option>
+              <option value="pull" ${currentAction === 'pull' ? 'selected' : ''}>📥 读取 / 拉取 (Pull)</option>
+              <option value="conflict" ${currentAction === 'conflict' ? 'selected' : ''}>⚠️ 冲突副本 (Conflict)</option>
+              <option value="delete" ${currentAction === 'delete' ? 'selected' : ''}>🗑️ 删除文件 (Delete)</option>
+              <option value="ignore" ${currentAction === 'ignore' ? 'selected' : ''}>🚫 规则忽略 (Ignored)</option>
+              <option value="error" ${currentAction === 'error' ? 'selected' : ''}>❌ 异常错误 (Error)</option>
+            </select>
+
+            <select id="admin-log-filter-status">
+              <option value="">全部状态 (All Status)</option>
+              <option value="success" ${currentStatus === 'success' ? 'selected' : ''}>✓ 成功 (Success)</option>
+              <option value="conflict" ${currentStatus === 'conflict' ? 'selected' : ''}>⚠️ 冲突 (Conflict)</option>
+              <option value="error" ${currentStatus === 'error' ? 'selected' : ''}>✕ 错误 (Error)</option>
+              <option value="ignored" ${currentStatus === 'ignored' ? 'selected' : ''}>- 忽略 (Ignored)</option>
+            </select>
+
+            <input type="text" id="admin-log-filter-search" placeholder="搜索文件名、路径或设备…" value="${escapeHtml(currentSearch)}" style="width:200px;" />
+            <button class="secondary" id="admin-log-search-btn">🔍 筛选</button>
+          </div>
+        </div>
+
+        <div class="sync-logs-table-wrap">
+          <table class="data-table" style="width:100%;">
+            <thead>
+              <tr>
+                <th style="width:140px;">时间</th>
+                <th style="width:85px;">动作</th>
+                <th>文件路径</th>
+                <th style="width:80px;">大小</th>
+                <th style="width:120px;">用户 / 设备</th>
+                <th style="width:80px;">状态</th>
+                <th>详细说明</th>
+              </tr>
+            </thead>
+            <tbody id="admin-logs-tbody"></tbody>
+          </table>
+        </div>
+      `;
+
+      // Event bindings
+      mainPanel.querySelector('#admin-logs-refresh-btn').onclick = () => loadLogs();
+      mainPanel.querySelector('#admin-log-search-btn').onclick = () => {
+        currentVaultFilter = mainPanel.querySelector('#admin-log-filter-vault').value;
+        currentAction = mainPanel.querySelector('#admin-log-filter-action').value;
+        currentStatus = mainPanel.querySelector('#admin-log-filter-status').value;
+        currentSearch = mainPanel.querySelector('#admin-log-filter-search').value.trim();
+        loadLogs();
+      };
+      mainPanel.querySelector('#admin-log-filter-vault').onchange = () => {
+        currentVaultFilter = mainPanel.querySelector('#admin-log-filter-vault').value;
+        loadLogs();
+      };
+      mainPanel.querySelector('#admin-log-filter-action').onchange = () => {
+        currentAction = mainPanel.querySelector('#admin-log-filter-action').value;
+        loadLogs();
+      };
+      mainPanel.querySelector('#admin-log-filter-status').onchange = () => {
+        currentStatus = mainPanel.querySelector('#admin-log-filter-status').value;
+        loadLogs();
+      };
+      mainPanel.querySelector('#admin-log-filter-search').onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          currentSearch = mainPanel.querySelector('#admin-log-filter-search').value.trim();
+          loadLogs();
+        }
+      };
+
+      const tbody = mainPanel.querySelector('#admin-logs-tbody');
+      if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">暂无符合条件的全局同步日志</td></tr>`;
+        return;
+      }
+
+      for (const item of logs) {
+        const tr = document.createElement('tr');
+        const actionMap = {
+          update: { label: '更新', cls: 'update' },
+          pull: { label: '拉取', cls: 'pull' },
+          delete: { label: '删除', cls: 'delete' },
+          conflict: { label: '冲突', cls: 'conflict' },
+          ignore: { label: '忽略', cls: 'ignore' },
+          error: { label: '错误', cls: 'error' },
+        };
+        const actInfo = actionMap[item.action] || { label: item.action, cls: 'pull' };
+
+        const statusIcon = item.status === 'success' ? '✓ 成功' : item.status === 'conflict' ? '⚠️ 冲突' : item.status === 'error' ? '✕ 失败' : '- 忽略';
+        const statusClass = item.status || 'success';
+
+        tr.innerHTML = `
+          <td class="meta" style="font-size:12px;">${new Date(item.timestamp).toLocaleString()}</td>
+          <td><span class="sync-log-badge ${actInfo.cls}">${actInfo.label}</span></td>
+          <td><b style="font-family:ui-monospace,monospace;font-size:12.5px;">${escapeHtml(item.path)}</b></td>
+          <td class="meta" style="font-size:12px;">${item.size ? formatBytes(item.size) : '-'}</td>
+          <td class="meta" style="font-size:12px;">
+            <div><b>👤 ${escapeHtml(item.username || 'user')}</b></div>
+            <div style="color:var(--muted)">💻 ${escapeHtml(item.deviceName || 'Client')}</div>
+          </td>
+          <td><span class="sync-log-status ${statusClass}">${statusIcon}</span></td>
+          <td style="font-size:12px;color:var(--text-secondary);">${escapeHtml(item.detail || '')}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    await loadLogs();
   }
 
   // --------------------------- File Editor & Previewer -----------------------

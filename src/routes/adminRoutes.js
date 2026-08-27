@@ -5,6 +5,7 @@ const vaultsStore = require('../vaults');
 const sharesStore = require('../shares');
 const syncRulesStore = require('../syncRules');
 const settingsManager = require('../settings');
+const syncLogger = require('../syncLogger');
 const dbManager = require('../db');
 
 const router = express.Router();
@@ -74,53 +75,17 @@ router.post('/database/switch', async (req, res) => {
 
   try {
     // Snapshot current memory state before switching if migration requested
-    const currentUsers = users.getRawUsers();
-    const currentVaults = vaultsStore.getRawVaults();
-    const currentShares = sharesStore.getRawShares();
+    const dataset = {
+      users: users.getRawUsers(),
+      vaults: vaultsStore.getRawVaults(),
+      shares: sharesStore.getRawShares(),
+      syncRules: syncRulesStore.getRawRules(),
+      systemSettings: settingsManager.getAll(),
+      apiTokens: settingsManager.listAllTokens ? settingsManager.listAllTokens() : [],
+      syncLogs: syncLogger.getRawLogs ? syncLogger.getRawLogs() : [],
+    };
 
-    // Initialize new database engine
-    await dbManager.init(config);
-
-    // If migrating existing in-memory data to the new DB engine
-    if (migrateExisting && dbManager.type !== 'json') {
-      console.log(`[DB] Migrating ${currentUsers.length} users, ${currentVaults.length} vaults, ${currentShares.length} shares to ${dbManager.type}...`);
-      for (const u of currentUsers) {
-        try {
-          await dbManager.execute(
-            'INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)',
-            [u.id, u.username, u.passwordHash, u.role, u.createdAt]
-          );
-        } catch {}
-      }
-      for (const v of currentVaults) {
-        try {
-          await dbManager.execute(
-            'INSERT INTO vaults (id, owner_id, name, created_at) VALUES (?, ?, ?, ?)',
-            [v.id, v.ownerId, v.name, v.createdAt]
-          );
-        } catch {}
-      }
-      for (const s of currentShares) {
-        try {
-          await dbManager.execute(
-            'INSERT INTO shares (id, vault_id, user_id, file_path, title, has_password, password_hash, allow_copy, created_at, expires_at, view_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [
-              s.id,
-              s.vaultId,
-              s.userId,
-              s.filePath,
-              s.title,
-              s.hasPassword ? 1 : 0,
-              s.passwordHash,
-              s.allowCopy ? 1 : 0,
-              s.createdAt,
-              s.expiresAt,
-              s.viewCount,
-            ]
-          );
-        } catch {}
-      }
-    }
+    const result = await dbManager.switchAndMigrate(config, dataset, migrateExisting);
 
     // Refresh memory cache from the newly selected DB
     await users.loadFromDb();
@@ -128,16 +93,33 @@ router.post('/database/switch', async (req, res) => {
     await sharesStore.loadFromDb();
     await syncRulesStore.loadFromDb();
     await settingsManager.loadFromDb();
+    await syncLogger.loadFromDb();
 
     res.json({
       ok: true,
-      message: `已成功切换数据库引擎至 ${dbManager.type.toUpperCase()}`,
+      message: result.message || `已成功切换数据库引擎至 ${dbManager.type.toUpperCase()}`,
       status: dbManager.getStatus(),
+      migrated: result.migrated,
+      counts: result.counts,
     });
   } catch (err) {
     console.error('[DB Switch Error]', err);
     res.status(500).json({ error: `数据库切换失败: ${err.message}` });
   }
+});
+
+// Admin global sync logs endpoint
+router.get('/sync-logs', (req, res) => {
+  const { vaultId, action, status, search, limit, offset } = req.query;
+  const result = syncLogger.getLogs({
+    vaultId: vaultId || null,
+    action: action || null,
+    status: status || null,
+    search: search || null,
+    limit: limit ? parseInt(limit, 10) : 100,
+    offset: offset ? parseInt(offset, 10) : 0,
+  });
+  res.json(result);
 });
 
 module.exports = router;

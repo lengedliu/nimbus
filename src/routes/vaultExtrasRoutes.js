@@ -3,6 +3,7 @@ const { requireAuth } = require('../auth');
 const vaultsStore = require('../vaults');
 const storage = require('../storage');
 const syncRules = require('../syncRules');
+const syncLogger = require('../syncLogger');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -148,6 +149,32 @@ router.get('/:vaultId/export', (req, res) => {
   storage.exportVaultZip(vaultId, res).catch((err) => {
     if (!res.headersSent) res.status(500).json({ error: err.message });
   });
+});
+
+// ---------------------------------- sync logs ------------------------------------
+
+router.get('/:vaultId/sync-logs', (req, res) => {
+  if (!checkAccess(req, res)) return;
+  const { vaultId } = req.params;
+  const { action, status, search, limit, offset } = req.query;
+
+  const result = syncLogger.getLogs({
+    vaultId,
+    action: action || null,
+    status: status || null,
+    search: search || null,
+    limit: limit ? parseInt(limit, 10) : 50,
+    offset: offset ? parseInt(offset, 10) : 0,
+  });
+
+  res.json(result);
+});
+
+router.delete('/:vaultId/sync-logs', async (req, res) => {
+  if (!checkAccess(req, res)) return;
+  const { vaultId } = req.params;
+  await syncLogger.clearVaultLogs(vaultId);
+  res.json({ ok: true });
 });
 
 module.exports = router;

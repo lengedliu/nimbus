@@ -21,6 +21,7 @@ const vaultsStore = require('./src/vaults');
 const sharesStore = require('./src/shares');
 const syncRulesStore = require('./src/syncRules');
 const settingsManager = require('./src/settings');
+const syncLogger = require('./src/syncLogger');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(VAULTS_DIR, { recursive: true });
@@ -34,6 +35,7 @@ fs.mkdirSync(VAULTS_DIR, { recursive: true });
     await sharesStore.loadFromDb();
     await syncRulesStore.loadFromDb();
     await settingsManager.loadFromDb();
+    await syncLogger.loadFromDb();
   } catch (err) {
     console.error('[DB] Initial startup load error:', err);
   }

@@ -5,6 +5,7 @@ const users = require('./users');
 const vaults = require('./vaults');
 const storage = require('./storage');
 const syncRules = require('./syncRules');
+const syncLogger = require('./syncLogger');
 
 /**
  * FNS realtime hub.
@@ -80,7 +81,7 @@ class FnsHub {
   }
 
   _onConnection(ws, user, vaultId, deviceName) {
-    const client = { ws, userId: user.id, deviceName, connectedAt: Date.now() };
+    const client = { ws, userId: user.id, username: user.username, deviceName, connectedAt: Date.now() };
     this._room(vaultId).add(client);
 
     this._send(ws, { type: 'init', manifest: storage.getManifest(vaultId) });
@@ -109,7 +110,32 @@ class FnsHub {
 
       if (msg.type === 'pull') {
         const buf = storage.readFile(vaultId, msg.path);
-        if (buf === null) return this._send(client.ws, { type: 'error', message: 'file not found', path: msg.path });
+        if (buf === null) {
+          syncLogger.recordLog({
+            vaultId,
+            userId: client.userId,
+            username: client.username,
+            deviceName: client.deviceName,
+            action: 'pull',
+            path: msg.path,
+            status: 'error',
+            detail: '文件不存在 (404)',
+          });
+          return this._send(client.ws, { type: 'error', message: 'file not found', path: msg.path });
+        }
+
+        syncLogger.recordLog({
+          vaultId,
+          userId: client.userId,
+          username: client.username,
+          deviceName: client.deviceName,
+          action: 'pull',
+          path: msg.path,
+          size: buf.length,
+          status: 'success',
+          detail: '客户端拉取完整文件',
+        });
+
         return this._send(client.ws, {
           type: 'file',
           path: msg.path,
@@ -120,6 +146,16 @@ class FnsHub {
 
       if (msg.type === 'push') {
         if (syncRules.isPathIgnored(vaultId, msg.path)) {
+          syncLogger.recordLog({
+            vaultId,
+            userId: client.userId,
+            username: client.username,
+            deviceName: client.deviceName,
+            action: 'ignore',
+            path: msg.path,
+            status: 'ignored',
+            detail: '命中同步黑名单/忽略规则',
+          });
           return this._send(client.ws, { type: 'ack', path: msg.path, ignored: true });
         }
 
@@ -131,6 +167,19 @@ class FnsHub {
 
         if (!result.written && result.conflict) {
           this._logActivity(vaultId, { type: 'conflict', path: msg.path, conflictPath: result.conflict, userId: client.userId });
+          syncLogger.recordLog({
+            vaultId,
+            userId: client.userId,
+            username: client.username,
+            deviceName: client.deviceName,
+            action: 'conflict',
+            path: msg.path,
+            size: buffer.length,
+            hash: result.currentHash,
+            status: 'conflict',
+            detail: `并发冲突，已创建分支副本: ${result.conflict}`,
+          });
+
           this._send(client.ws, {
             type: 'conflict',
             path: msg.path,
@@ -143,20 +192,54 @@ class FnsHub {
         }
 
         this._logActivity(vaultId, { type: 'change', path: msg.path, userId: client.userId });
+        syncLogger.recordLog({
+          vaultId,
+          userId: client.userId,
+          username: client.username,
+          deviceName: client.deviceName,
+          action: 'update',
+          path: msg.path,
+          size: buffer.length,
+          hash: result.currentHash,
+          status: 'success',
+          detail: '客户端推送更新',
+        });
+
         this._send(client.ws, { type: 'ack', path: msg.path, hash: result.currentHash });
         this.broadcastFileChange(vaultId, msg.path, result, client.userId);
         return;
       }
 
       if (msg.type === 'delete') {
-        storage.deleteFile(vaultId, msg.path);
+        const ok = storage.deleteFile(vaultId, msg.path);
         this._logActivity(vaultId, { type: 'delete', path: msg.path, userId: client.userId });
+        syncLogger.recordLog({
+          vaultId,
+          userId: client.userId,
+          username: client.username,
+          deviceName: client.deviceName,
+          action: 'delete',
+          path: msg.path,
+          status: ok ? 'success' : 'error',
+          detail: ok ? '移入回收站' : '文件不存在',
+        });
+
         this.broadcastFileDelete(vaultId, msg.path, client.userId);
         return;
       }
 
       this._send(client.ws, { type: 'error', message: `unknown message type: ${msg.type}` });
     } catch (e) {
+      syncLogger.recordLog({
+        vaultId,
+        userId: client.userId,
+        username: client.username,
+        deviceName: client.deviceName,
+        action: 'error',
+        path: msg.path || 'unknown',
+        status: 'error',
+        detail: e.message,
+      });
       this._send(client.ws, { type: 'error', message: e.message });
     }
   }

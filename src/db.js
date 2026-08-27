@@ -232,6 +232,23 @@ class DatabaseManager {
         last_used_at INTEGER
       );
     `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS sync_logs (
+        id TEXT PRIMARY KEY,
+        vault_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        username TEXT NOT NULL,
+        device_name TEXT NOT NULL,
+        client_ip TEXT,
+        action TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER DEFAULT 0,
+        file_hash TEXT,
+        status TEXT NOT NULL,
+        detail TEXT,
+        timestamp INTEGER NOT NULL
+      );
+    `);
   }
 
   async _createPostgresTables() {
@@ -279,6 +296,21 @@ class DatabaseManager {
         token TEXT NOT NULL,
         created_at BIGINT NOT NULL,
         last_used_at BIGINT
+      );
+      CREATE TABLE IF NOT EXISTS sync_logs (
+        id VARCHAR(64) PRIMARY KEY,
+        vault_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        username VARCHAR(128) NOT NULL,
+        device_name VARCHAR(128) NOT NULL,
+        client_ip VARCHAR(64),
+        action VARCHAR(32) NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size BIGINT DEFAULT 0,
+        file_hash VARCHAR(128),
+        status VARCHAR(32) NOT NULL,
+        detail TEXT,
+        timestamp BIGINT NOT NULL
       );
     `);
   }
@@ -338,6 +370,23 @@ class DatabaseManager {
         token TEXT NOT NULL,
         created_at BIGINT NOT NULL,
         last_used_at BIGINT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    await this.mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS sync_logs (
+        id VARCHAR(64) PRIMARY KEY,
+        vault_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        username VARCHAR(128) NOT NULL,
+        device_name VARCHAR(128) NOT NULL,
+        client_ip VARCHAR(64),
+        action VARCHAR(32) NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size BIGINT DEFAULT 0,
+        file_hash VARCHAR(128),
+        status VARCHAR(32) NOT NULL,
+        detail TEXT,
+        timestamp BIGINT NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
   }
@@ -505,6 +554,7 @@ class DatabaseManager {
       syncRules: 0,
       systemSettings: 0,
       apiTokens: 0,
+      syncLogs: 0,
     };
 
     if (doMigrate && dataset) {
@@ -517,6 +567,7 @@ class DatabaseManager {
         fs.writeFileSync(path.join(DATA_DIR, 'shares.json'), JSON.stringify(dataset.shares || [], null, 2));
         fs.writeFileSync(path.join(DATA_DIR, 'settings.json'), JSON.stringify(dataset.systemSettings || {}, null, 2));
         fs.writeFileSync(path.join(DATA_DIR, 'api_tokens.json'), JSON.stringify(dataset.apiTokens || [], null, 2));
+        fs.writeFileSync(path.join(DATA_DIR, 'sync_logs.json'), JSON.stringify(dataset.syncLogs || [], null, 2));
 
         migratedCounts = {
           users: (dataset.users || []).length,
@@ -525,6 +576,7 @@ class DatabaseManager {
           syncRules: Object.keys(dataset.syncRules || {}).length,
           systemSettings: Object.keys(dataset.systemSettings || {}).length,
           apiTokens: (dataset.apiTokens || []).length,
+          syncLogs: (dataset.syncLogs || []).length,
         };
       } else {
         // Insert into SQL tables
@@ -619,6 +671,34 @@ class DatabaseManager {
             migratedCounts.apiTokens++;
           } catch (e) {
             console.warn('[DB Migrate] api_token insert skipped:', e.message);
+          }
+        }
+
+        // Sync Logs
+        for (const l of dataset.syncLogs || []) {
+          try {
+            await this.execute(
+              `INSERT INTO sync_logs (id, vault_id, user_id, username, device_name, client_ip, action, file_path, file_size, file_hash, status, detail, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                l.id,
+                l.vaultId,
+                l.userId,
+                l.username,
+                l.deviceName,
+                l.clientIp || null,
+                l.action,
+                l.path,
+                l.size || 0,
+                l.hash || null,
+                l.status || 'success',
+                l.detail || null,
+                l.timestamp,
+              ]
+            );
+            migratedCounts.syncLogs++;
+          } catch (e) {
+            console.warn('[DB Migrate] sync_log insert skipped:', e.message);
           }
         }
       }
