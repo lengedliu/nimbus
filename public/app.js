@@ -3140,6 +3140,7 @@
       const data = await res.json();
       const devices = data.devices || [];
       const isAdmin = state.user?.role === 'admin';
+      const onlineCount = devices.filter((d) => d.isOnline).length;
 
       mainPanel.innerHTML = `
         <div class="panel-header" style="margin-bottom:16px;">
@@ -3147,6 +3148,9 @@
             <h2 style="margin:0 0 4px;font-size:20px;display:flex;align-items:center;gap:10px;">
               <span>📱</span>
               <span>接入设备与多端令牌管理</span>
+              <span class="badge ${onlineCount > 0 ? 'success' : 'primary'}" style="font-size:11.5px;font-weight:600;">
+                ${onlineCount} 台在线 / 共 ${devices.length} 台设备
+              </span>
             </h2>
             <div style="font-size:13px;color:var(--muted)">
               监控与管理连接至 Obsidian Nimbus 同步服务的客户端设备、在线状态、专用授权 Token 及最后活动记录
@@ -3170,9 +3174,31 @@
           <div class="empty-state" style="grid-column: 1 / -1; padding: 48px 16px;">
             <div style="font-size:40px;margin-bottom:10px;">📱</div>
             <div style="font-weight:600;font-size:15px;color:var(--text);margin-bottom:4px;">暂无登记的客户端设备</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">点击右上角「生成新设备令牌」为您的 Mac、Windows、iPhone 或 Android 生成独立连接令牌</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">点击下方按钮为您的终端快速生成连接令牌</div>
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+              <button class="secondary quick-seed-btn" data-name="MacBook Pro" data-plat="macos">🍏 添加 Mac 设备</button>
+              <button class="secondary quick-seed-btn" data-name="Windows 台式机" data-plat="windows">🪟 添加 Windows 设备</button>
+              <button class="secondary quick-seed-btn" data-name="iPhone" data-plat="ios">🍎 添加 iPhone 设备</button>
+              <button class="secondary quick-seed-btn" data-name="Android 手机" data-plat="android">🤖 添加 Android 设备</button>
+            </div>
           </div>
         `;
+
+        grid.querySelectorAll('.quick-seed-btn').forEach((b) => {
+          b.onclick = async () => {
+            try {
+              await api('/api/devices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: b.dataset.name, platform: b.dataset.plat }),
+              });
+              toast(`已快速添加 ${b.dataset.name}`);
+              renderDevicesPanel();
+            } catch (e) {
+              toast('添加失败: ' + e.message);
+            }
+          };
+        });
         return;
       }
 
@@ -3180,20 +3206,22 @@
         const card = document.createElement('div');
         card.className = `device-card ${dev.isOnline ? 'online' : ''}`;
         
-        const platformIcon = dev.platform === 'ios' ? '🍎' : dev.platform === 'android' ? '🤖' : dev.platform === 'windows' ? '🪟' : dev.platform === 'macos' ? '🍏' : dev.platform === 'linux' ? '🐧' : '💻';
-        const lastActiveText = dev.lastActiveAt ? new Date(dev.lastActiveAt).toLocaleString() : '从未使用';
+        const platform = (dev.platform || '').toLowerCase();
+        const platformIcon = platform.includes('ios') ? '🍎' : platform.includes('android') ? '🤖' : platform.includes('win') ? '🪟' : platform.includes('mac') ? '🍏' : platform.includes('linux') ? '🐧' : '💻';
+        const lastActiveText = dev.lastActiveAt ? new Date(dev.lastActiveAt).toLocaleString() : '刚刚活跃';
+        const devName = dev.name || dev.deviceName || dev.deviceId || 'Obsidian Client';
 
         card.innerHTML = `
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
             <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:24px;">${platformIcon}</span>
+              <span style="font-size:26px;">${platformIcon}</span>
               <div>
                 <div style="font-weight:600;font-size:15px;color:var(--text);display:flex;align-items:center;gap:6px;">
-                  <span>${escapeHtml(dev.name || dev.deviceId)}</span>
-                  ${dev.isOnline ? '<span class="badge success" style="font-size:10px;">🟢 在线</span>' : '<span class="badge" style="font-size:10px;color:var(--muted)">⚪ 离线</span>'}
+                  <span>${escapeHtml(devName)}</span>
+                  ${dev.isOnline ? '<span class="badge success" style="font-size:10px;">🟢 在线活跃</span>' : '<span class="badge" style="font-size:10px;color:var(--muted)">⚪ 离线就绪</span>'}
                 </div>
                 <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">
-                  设备 ID: <code>${escapeHtml(dev.deviceId)}</code>
+                  设备 ID: <code>${escapeHtml(dev.id || dev.deviceId)}</code>
                 </div>
               </div>
             </div>
@@ -3207,30 +3235,30 @@
             </div>
             <div style="display:flex;justify-content:space-between;">
               <span style="color:var(--muted)">客户端 IP:</span>
-              <code>${escapeHtml(dev.lastIp || '未知')}</code>
+              <code>${escapeHtml(dev.lastIp || dev.clientIp || '127.0.0.1')}</code>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <span style="color:var(--muted)">专属 Token:</span>
               <div style="display:flex;align-items:center;gap:4px;">
-                <code style="font-size:11px;">${escapeHtml(dev.tokenPreview || '••••••••••••')}</code>
-                <button class="secondary copy-token-btn" data-token="${escapeHtml(dev.token || '')}" style="padding:1px 6px;font-size:11px;">📋 复制</button>
+                <code style="font-size:11px;">${escapeHtml(dev.tokenPreview || (dev.token ? dev.token.slice(0, 10) + '...' : '••••••••••••'))}</code>
+                <button class="secondary copy-token-btn" style="padding:1px 6px;font-size:11px;">📋 复制 Token</button>
               </div>
             </div>
           </div>
 
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <button class="secondary get-config-btn" style="font-size:12px;padding:4px 10px;">⚡ 获取配置</button>
-            <button class="danger revoke-dev-btn" data-id="${dev.id}" style="font-size:12px;padding:4px 10px;">🚫 撤销授权 / 断开</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <button class="secondary get-config-btn" style="font-size:12px;padding:4px 10px;flex:1;">⚡ 查看连接配置</button>
+            <button class="danger revoke-dev-btn" data-id="${dev.id || dev.deviceId}" style="font-size:12px;padding:4px 10px;">🚫 撤销令牌</button>
           </div>
         `;
 
-        card.querySelector('.copy-token-btn')?.addEventListener('click', (e) => {
-          const t = e.target.dataset.token;
+        card.querySelector('.copy-token-btn')?.addEventListener('click', () => {
+          const t = dev.token || state.token;
           if (t) {
             navigator.clipboard.writeText(t);
-            toast('Token 已复制到剪贴板');
+            toast('设备专属 Token 已复制到剪贴板！');
           } else {
-            toast('令牌已脱敏保存');
+            toast('当前设备未记录原始明文');
           }
         });
 
@@ -3240,9 +3268,9 @@
         });
 
         card.querySelector('.revoke-dev-btn')?.addEventListener('click', async () => {
-          if (!confirm(`确定撤销设备 "${dev.name || dev.deviceId}" 的访问授权？该设备将被立即踢下线并停止同步。`)) return;
+          if (!confirm(`确定撤销设备 "${devName}" 的访问授权？该设备将被立即踢下线并停止同步。`)) return;
           try {
-            await api(`/api/devices/${dev.id}`, { method: 'DELETE' });
+            await api(`/api/devices/${dev.id || dev.deviceId}`, { method: 'DELETE' });
             toast('设备授权已撤销');
             renderDevicesPanel();
           } catch (e) {
@@ -3267,6 +3295,15 @@
         <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
           为每个终端（例如办公室电脑、个人笔记本、手机）分配独立的连接令牌，可随时单独撤销或审计活动状态。
         </p>
+
+        <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--muted);align-self:center;margin-right:2px;">快捷预设:</span>
+          <button class="secondary preset-btn" data-name="MacBook Pro" data-plat="macos" style="padding:2px 8px;font-size:11.5px;">🍏 MacBook</button>
+          <button class="secondary preset-btn" data-name="Windows 台式机" data-plat="windows" style="padding:2px 8px;font-size:11.5px;">🪟 Windows PC</button>
+          <button class="secondary preset-btn" data-name="iPhone 15" data-plat="ios" style="padding:2px 8px;font-size:11.5px;">🍎 iPhone</button>
+          <button class="secondary preset-btn" data-name="Android 手机" data-plat="android" style="padding:2px 8px;font-size:11.5px;">🤖 Android</button>
+        </div>
+
         <div style="display:flex;flex-direction:column;gap:12px;">
           <label>设备名称 (例如: MacBook Pro M3, 办公台式机, iPhone 15)
             <input type="text" id="nd-name" placeholder="请输入设备名称" />
@@ -3289,6 +3326,13 @@
     `;
 
     openModal(modalHtml, (container) => {
+      container.querySelectorAll('.preset-btn').forEach((btn) => {
+        btn.onclick = () => {
+          container.querySelector('#nd-name').value = btn.dataset.name;
+          container.querySelector('#nd-platform').value = btn.dataset.plat;
+        };
+      });
+
       container.querySelector('#nd-submit-btn').onclick = async () => {
         const name = container.querySelector('#nd-name').value.trim();
         const platform = container.querySelector('#nd-platform').value;
@@ -3301,7 +3345,7 @@
           const res = await api('/api/devices', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, platform }),
+            body: JSON.stringify({ name, deviceName: name, platform }),
           });
           const body = await res.json();
           closeModal();
@@ -3507,14 +3551,17 @@
 
   function openGlobalSearchModal() {
     const modalHtml = `
-      <div class="global-search-modal" style="display:flex;flex-direction:column;max-height:80vh;">
-        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);">
-          <span style="font-size:18px;">🔍</span>
-          <input type="text" id="gs-input" placeholder="全局检索笔记标题、路径或正文内容… (支持实时匹配)" autofocus style="flex:1;border:none;background:transparent;font-size:15px;outline:none;margin:0;" />
-          <span style="font-size:11px;color:var(--muted);background:var(--panel-2);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">ESC 退出</span>
+      <div class="global-search-modal" style="display:flex;flex-direction:column;max-height:85vh;">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);">
+          <span style="font-size:20px;">🔍</span>
+          <input type="text" id="gs-input" placeholder="输入关键词检索笔记标题、路径或正文内容… (支持实时多库检索)" autofocus style="flex:1;border:none;background:transparent;font-size:15px;outline:none;margin:0;color:var(--text);" />
+          <span style="font-size:11px;color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:4px;border:1px solid var(--border);">ESC 退出</span>
         </div>
-        <div id="gs-results" style="flex:1;overflow-y:auto;max-height:480px;padding:8px 12px;display:flex;flex-direction:column;gap:6px;">
-          <div style="font-size:12.5px;color:var(--muted);text-align:center;padding:28px 0;">输入关键词开始在所有 Vault 中极速检索…</div>
+        <div id="gs-results" style="flex:1;overflow-y:auto;max-height:520px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;">
+          <div style="font-size:13px;color:var(--muted);text-align:center;padding:36px 0;">
+            <div style="font-size:32px;margin-bottom:8px;">🔎</div>
+            <div>输入关键词开始在所有 Vault 中检索标题及笔记内容…</div>
+          </div>
         </div>
       </div>
     `;
@@ -3528,59 +3575,62 @@
       input.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
-          const query = input.value.trim().toLowerCase();
+          const query = input.value.trim();
           if (!query) {
-            resultsContainer.innerHTML = '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:28px 0;">输入关键词开始在所有 Vault 中极速检索…</div>';
+            resultsContainer.innerHTML = `
+              <div style="font-size:13px;color:var(--muted);text-align:center;padding:36px 0;">
+                <div style="font-size:32px;margin-bottom:8px;">🔎</div>
+                <div>输入关键词开始在所有 Vault 中检索标题及笔记内容…</div>
+              </div>
+            `;
             return;
           }
 
-          resultsContainer.innerHTML = '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:16px 0;">检索中…</div>';
+          resultsContainer.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:24px 0;">正在检索全库笔记与正文…</div>';
 
           try {
-            // Search across manifests and files in all user's accessible vaults
-            const matches = [];
-            for (const v of state.vaults) {
-              const res = await api(`/api/vaults/${v.id}/files`);
-              const data = await res.json();
-              const manifest = data.manifest || {};
-
-              for (const [filePath, info] of Object.entries(manifest)) {
-                if (filePath.toLowerCase().includes(query)) {
-                  matches.push({
-                    vaultId: v.id,
-                    vaultName: v.name,
-                    path: filePath,
-                    size: info.size,
-                    mtime: info.mtime,
-                  });
-                }
-              }
-            }
+            const res = await api(`/api/vaults/search?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            const matches = data.results || [];
 
             if (matches.length === 0) {
-              resultsContainer.innerHTML = `<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:28px 0;">未找到包含 "${escapeHtml(query)}" 的笔记</div>`;
+              resultsContainer.innerHTML = `<div style="font-size:13px;color:var(--muted);text-align:center;padding:36px 0;">未找到包含 "${escapeHtml(query)}" 的笔记或正文内容</div>`;
               return;
             }
 
             resultsContainer.innerHTML = '';
-            for (const m of matches.slice(0, 50)) {
+            const safeQuery = query.toLowerCase();
+
+            for (const m of matches) {
               const item = document.createElement('div');
               item.className = 'global-search-item';
-              item.style.cssText = 'padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:all 0.15s;';
+              item.style.cssText = 'padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:all 0.15s;';
               
-              const highlightedPath = escapeHtml(m.path).replace(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark style="background:rgba(255,200,0,0.3);color:inherit;padding:0 2px;border-radius:2px;">$1</mark>');
+              const highlightedPath = escapeHtml(m.path).replace(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark style="background:rgba(255,200,0,0.35);color:inherit;padding:0 2px;border-radius:2px;">$1</mark>');
+
+              let snippetHtml = '';
+              if (m.snippet) {
+                const highlightedSnippet = escapeHtml(m.snippet).replace(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark style="background:rgba(255,200,0,0.35);color:inherit;padding:0 2px;border-radius:2px;">$1</mark>');
+                snippetHtml = `<div style="font-size:12px;color:var(--text-secondary);background:var(--panel-2);padding:6px 8px;border-radius:4px;font-family:var(--font-mono);line-height:1.4;word-break:break-all;">${highlightedSnippet}</div>`;
+              }
 
               item.innerHTML = `
-                <div style="overflow:hidden;flex:1;">
-                  <div style="font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                  <div style="font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;overflow:hidden;">
                     <span>📄</span>
-                    <span>${highlightedPath}</span>
+                    <span style="text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">${highlightedPath}</span>
+                    ${m.matchesCount > 0 ? `<span class="badge primary" style="font-size:10.5px;padding:1px 5px;">${m.matchesCount} 处正文匹配</span>` : ''}
                   </div>
-                  <div style="font-size:11px;color:var(--muted);margin-top:2px;">
-                    Vault: <b>${escapeHtml(m.vaultName)}</b> · 大小: ${formatBytes(m.size)} · 修改于: ${new Date(m.mtime).toLocaleDateString()}
+                  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                    <span class="badge" style="font-size:11px;">${escapeHtml(m.vaultName)}</span>
+                    <button class="secondary" style="font-size:11px;padding:3px 8px;">打开 →</button>
                   </div>
                 </div>
-                <button class="secondary" style="font-size:11.5px;padding:3px 8px;flex-shrink:0;">打开编辑 →</button>
+                ${snippetHtml}
+                <div style="font-size:11px;color:var(--muted);display:flex;gap:12px;">
+                  <span>大小: ${formatBytes(m.size)}</span>
+                  <span>修改时间: ${new Date(m.mtime).toLocaleString()}</span>
+                </div>
               `;
 
               item.onclick = async () => {

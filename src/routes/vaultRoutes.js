@@ -40,6 +40,45 @@ router.get('/:vaultId/manifest', (req, res) => {
   res.json({ manifest: storage.getManifest(vaultId) });
 });
 
+// GET /api/vaults/search?q=keyword - Global search across all accessible vaults (filename and note contents)
+router.get('/search', (req, res) => {
+  const { q } = req.query;
+  if (!q || !q.trim()) return res.json({ results: [] });
+  const isAdmin = req.user.role === 'admin';
+  const userVaults = vaults.listForUser(req.user.id, isAdmin);
+  const results = [];
+
+  for (const v of userVaults) {
+    const matches = storage.searchVault(v.id, q.trim(), 50);
+    for (const m of matches) {
+      results.push({
+        vaultId: v.id,
+        vaultName: v.name,
+        path: m.path,
+        size: m.size,
+        mtime: m.mtime,
+        isPathMatch: m.isPathMatch,
+        matchesCount: m.matchesCount,
+        snippet: m.snippet || '',
+      });
+    }
+  }
+
+  res.json({ results });
+});
+
+// GET /api/vaults/:vaultId/search?q=keyword - Vault-level search
+router.get('/:vaultId/search', (req, res) => {
+  const { vaultId } = req.params;
+  const { q } = req.query;
+  const isAdmin = req.user.role === 'admin';
+  if (!vaults.hasReadAccess(req.user.id, vaultId, isAdmin)) {
+    return res.status(404).json({ error: 'Not found or no read permission' });
+  }
+  const results = storage.searchVault(vaultId, q || '', 50);
+  res.json({ results });
+});
+
 // ------------------------- Member & Permission Management -------------------------
 
 // GET /api/vaults/:vaultId/permissions
