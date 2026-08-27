@@ -538,7 +538,22 @@ class NimbusSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', { text: '☁️ Nimbus 同步插件设置' });
     containerEl.createEl('p', { text: '连接您的私有 Nimbus 服务端，实现多设备极速双向无缝同步。', cls: 'setting-item-description' });
 
-    // 1. Server URL
+    // 1. Auth Mode Switch
+    new Setting(containerEl)
+      .setName('🔑 认证模式 (Auth Method)')
+      .setDesc('支持直接使用账号密码登录，或粘贴网页端生成的「设备专属令牌」')
+      .addDropdown(dd => {
+        dd.addOption('password', '账号密码登录 (默认)')
+          .addOption('token', '设备专属令牌 (Token 免密)')
+          .setValue(this.plugin.settings.authMode || 'password')
+          .onChange(async (val) => {
+            this.plugin.settings.authMode = val;
+            await this.plugin.saveSettings();
+            await this.display();
+          });
+      });
+
+    // 2. Server URL
     new Setting(containerEl)
       .setName('服务器地址 (Server URL)')
       .setDesc('Nimbus 服务端完整访问地址 (例如 http://192.168.50.154:8787)')
@@ -550,29 +565,47 @@ class NimbusSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    // 2. Username
-    new Setting(containerEl)
-      .setName('用户名 (Username)')
-      .setDesc('Nimbus 管理后台账号')
-      .addText(text => text
-        .setValue(this.plugin.settings.username)
-        .onChange(async (val) => {
-          this.plugin.settings.username = val;
-          await this.plugin.saveSettings();
-        }));
+    const currentAuthMode = this.plugin.settings.authMode || 'password';
 
-    // 3. Password
-    new Setting(containerEl)
-      .setName('密码 (Password)')
-      .setDesc('Nimbus 账号登录密码')
-      .addText(text => {
-        text.inputEl.type = 'password';
-        text.setValue(this.plugin.settings.password)
+    if (currentAuthMode === 'password') {
+      // 3. Username
+      new Setting(containerEl)
+        .setName('用户名 (Username)')
+        .setDesc('Nimbus 管理后台账号')
+        .addText(text => text
+          .setValue(this.plugin.settings.username)
           .onChange(async (val) => {
-            this.plugin.settings.password = val;
+            this.plugin.settings.username = val;
             await this.plugin.saveSettings();
-          });
-      });
+          }));
+
+      // 4. Password
+      new Setting(containerEl)
+        .setName('密码 (Password)')
+        .setDesc('Nimbus 账号登录密码')
+        .addText(text => {
+          text.inputEl.type = 'password';
+          text.setValue(this.plugin.settings.password)
+            .onChange(async (val) => {
+              this.plugin.settings.password = val;
+              await this.plugin.saveSettings();
+            });
+        });
+    } else {
+      // Token input mode
+      new Setting(containerEl)
+        .setName('设备专属令牌 (Device Access Token)')
+        .setDesc('在 Nimbus 网页端 [设置] -> [设备专属令牌] 复制的 Token 字符串')
+        .addText(text => {
+          text.inputEl.type = 'password';
+          text.setPlaceholder('粘贴 eyJhbGciOi... 令牌')
+            .setValue(this.plugin.settings.token || '')
+            .onChange(async (val) => {
+              this.plugin.settings.token = val.trim();
+              await this.plugin.saveSettings();
+            });
+        });
+    }
 
     // 4. Device ID
     new Setting(containerEl)
@@ -585,19 +618,39 @@ class NimbusSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    // 5. Login Button
-    new Setting(containerEl)
-      .setName('身份验证')
-      .setDesc(this.plugin.settings.token ? '✅ 已获取登录凭证' : '尚未登录')
-      .addButton(btn => btn
-        .setButtonText(this.plugin.settings.token ? '重新登录' : '登录验证')
-        .setCta()
-        .onClick(async () => {
-          const success = await this.plugin.login();
-          if (success) {
+    // 5. Auth Action Button
+    if (currentAuthMode === 'password') {
+      new Setting(containerEl)
+        .setName('身份验证')
+        .setDesc(this.plugin.settings.token ? '✅ 已获取登录凭证' : '尚未登录')
+        .addButton(btn => btn
+          .setButtonText(this.plugin.settings.token ? '重新登录' : '登录验证')
+          .setCta()
+          .onClick(async () => {
+            const success = await this.plugin.login();
+            if (success) {
+              await this.display();
+            }
+          }));
+    } else {
+      new Setting(containerEl)
+        .setName('令牌验证与连接')
+        .setDesc(this.plugin.settings.token ? '✅ 已填入令牌' : '请先粘贴设备专属令牌')
+        .addButton(btn => btn
+          .setButtonText('测试并连接')
+          .setCta()
+          .onClick(async () => {
+            if (!this.plugin.settings.token) {
+              new Notice('❌ 请先粘贴设备专属令牌');
+              return;
+            }
+            await this.plugin.autoMatchOrCreateVault();
+            if (this.plugin.settings.vaultId) {
+              this.plugin.connectWebSocket();
+            }
             await this.display();
-          }
-        }));
+          }));
+    }
 
     // 6. Local Vault Detection & Cloud Vault Selection
     if (this.plugin.settings.token) {
