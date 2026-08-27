@@ -55,7 +55,7 @@ class FnsHub {
       }
 
       this.wss.handleUpgrade(req, socket, head, (ws) => {
-        this._onConnection(ws, user, vaultId, query.deviceId || 'Obsidian Client');
+        this._onConnection(ws, user, vaultId, query.deviceId || query.deviceName || 'Obsidian Client');
       });
     });
   }
@@ -78,6 +78,17 @@ class FnsHub {
 
   getClientCount(vaultId) {
     return this.rooms.get(vaultId)?.size || 0;
+  }
+
+  getClients(vaultId) {
+    const room = this.rooms.get(vaultId);
+    if (!room) return [];
+    return Array.from(room).map((c) => ({
+      userId: c.userId,
+      username: c.username,
+      deviceName: c.deviceName || 'Obsidian Client',
+      connectedAt: c.connectedAt,
+    }));
   }
 
   _onConnection(ws, user, vaultId, deviceName) {
