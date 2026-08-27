@@ -133,9 +133,10 @@ function listTokensForUser(userId) {
   return cachedTokens.filter((t) => t.userId === userId).map((t) => ({
     id: t.id,
     label: t.label,
+    token: t.token,
     createdAt: t.createdAt,
     lastUsedAt: t.lastUsedAt,
-    // mask token for listing
+    // mask token for preview display
     maskedToken: t.token ? `${t.token.slice(0, 10)}...${t.token.slice(-6)}` : '',
   }));
 }

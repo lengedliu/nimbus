@@ -106,6 +106,36 @@ function updatePassword(userId, newPassword) {
   return true;
 }
 
+function updateUser(userId, { password, role }) {
+  const user = findById(userId);
+  if (!user) throw new Error('User not found');
+
+  if (role && (role === 'admin' || role === 'user')) {
+    user.role = role;
+  }
+
+  if (password && password.trim()) {
+    user.passwordHash = bcrypt.hashSync(password, 10);
+  }
+
+  if (dbManager.type === 'json') {
+    jsonDb.update((data) => {
+      data.users = (data.users || []).map((u) => (u.id === userId ? { ...user } : u));
+      return data;
+    });
+  } else {
+    dbManager
+      .execute('UPDATE users SET password_hash = ?, role = ? WHERE id = ?', [
+        user.passwordHash,
+        user.role,
+        userId,
+      ])
+      .catch((err) => console.error('[Users] DB update user error:', err));
+  }
+
+  return { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+}
+
 function listAll() {
   return usersCache.map((u) => ({
     id: u.id,
@@ -141,6 +171,7 @@ module.exports = {
   findByUsername,
   findById,
   createUser,
+  updateUser,
   verifyPassword,
   updatePassword,
   hasAnyUser,

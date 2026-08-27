@@ -197,6 +197,31 @@ router.delete('/tokens/:tokenId', (req, res) => {
   res.json({ ok });
 });
 
+// ----------------------- Webhook Settings -----------------------
+const webhooks = require('../webhooks');
+
+router.get('/webhooks', (req, res) => {
+  const config = webhooks.getWebhookConfig();
+  res.json({ ok: true, config });
+});
+
+router.put('/webhooks', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: '只有管理员有权限配置全局 Webhook' });
+  }
+  const updated = webhooks.saveWebhookConfig(req.body || {});
+  res.json({ ok: true, config: updated, message: 'Webhook 设置已更新' });
+});
+
+router.post('/webhooks/test', async (req, res) => {
+  try {
+    const result = await webhooks.testWebhook(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 // ----------------------- Plugin Config Generation -----------------------
 
 router.post('/plugin-config', (req, res) => {

@@ -14,6 +14,7 @@ const mcpRoutes = require('./src/routes/mcpRoutes');
 const vaultExtrasRoutes = require('./src/routes/vaultExtrasRoutes');
 const shareRoutes = require('./src/routes/shareRoutes');
 const settingsRoutes = require('./src/routes/settingsRoutes');
+const deviceRoutes = require('./src/routes/deviceRoutes');
 const fnsHub = require('./src/wsHub');
 const dbManager = require('./src/db');
 const users = require('./src/users');
@@ -23,6 +24,7 @@ const syncRulesStore = require('./src/syncRules');
 const settingsManager = require('./src/settings');
 const syncLogger = require('./src/syncLogger');
 const vaultMembers = require('./src/vaultMembers');
+const devicesStore = require('./src/devices');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(VAULTS_DIR, { recursive: true });
@@ -38,6 +40,7 @@ fs.mkdirSync(VAULTS_DIR, { recursive: true });
     await syncRulesStore.loadFromDb();
     await settingsManager.loadFromDb();
     await syncLogger.loadFromDb();
+    await devicesStore.loadFromDb();
   } catch (err) {
     console.error('[DB] Initial startup load error:', err);
   }
@@ -50,6 +53,7 @@ app.use(express.json());
 
 app.get('/api/health', (req, res) => res.json({ ok: true, name: 'nimbus-server' }));
 app.use('/api/auth', authRoutes);
+app.use('/api/devices', deviceRoutes);
 app.use('/api', shareRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/vaults', vaultRoutes);

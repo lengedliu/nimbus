@@ -144,6 +144,88 @@ router.put('/:vaultId/rules', (req, res) => {
   res.json({ rules: updated });
 });
 
+const conflicts = require('../conflicts');
+const backups = require('../backups');
+
+// ---------------------------------- conflicts ------------------------------------
+
+router.get('/:vaultId/conflicts', (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  const list = conflicts.listConflicts(req.params.vaultId);
+  res.json({ conflicts: list });
+});
+
+router.get('/:vaultId/conflicts/diff', (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  const { conflictPath } = req.query;
+  if (!conflictPath) return res.status(400).json({ error: 'conflictPath required' });
+  try {
+    const diff = conflicts.getConflictDiff(req.params.vaultId, conflictPath);
+    res.json(diff);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/:vaultId/conflicts/resolve', async (req, res) => {
+  if (!checkAccess(req, res, true)) return;
+  const { conflictPath, resolution, customContent } = req.body || {};
+  if (!conflictPath || !resolution) {
+    return res.status(400).json({ error: 'conflictPath and resolution required' });
+  }
+
+  try {
+    const result = await conflicts.resolveConflict(req.params.vaultId, {
+      conflictPath,
+      resolution,
+      customContent,
+      userId: req.user.id,
+      fnsHub: req.app.get('fnsHub'),
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------------------------------- backups / snapshots --------------------------
+
+router.get('/:vaultId/backups', (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  const list = backups.listBackups(req.params.vaultId);
+  res.json({ backups: list });
+});
+
+router.post('/:vaultId/backups', async (req, res) => {
+  if (!checkAccess(req, res, true)) return;
+  const { label } = req.body || {};
+  try {
+    const record = await backups.createBackup(req.params.vaultId, label);
+    res.json({ ok: true, backup: record });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:vaultId/backups/:backupId/download', (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  const fileInfo = backups.getBackupFilePath(req.params.vaultId, req.params.backupId);
+  if (!fileInfo) return res.status(404).json({ error: 'Backup not found' });
+
+  res.set({
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename="${encodeURIComponent(fileInfo.filename)}"`,
+  });
+  const stream = require('fs').createReadStream(fileInfo.fullPath);
+  stream.pipe(res);
+});
+
+router.delete('/:vaultId/backups/:backupId', (req, res) => {
+  if (!checkAccess(req, res, true)) return;
+  const ok = backups.deleteBackup(req.params.vaultId, req.params.backupId);
+  res.json({ ok });
+});
+
 // ---------------------------------- export zip -----------------------------------
 
 router.get('/:vaultId/export', (req, res) => {

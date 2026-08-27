@@ -60,6 +60,46 @@ router.post('/users', async (req, res) => {
   }
 });
 
+router.put('/users/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { password, role, vaultAssignments } = req.body || {};
+  const user = users.findById(userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  // Self-demotion check: prevent admin from accidentally removing their own admin role
+  if (userId === req.user.id && role && role !== 'admin') {
+    return res.status(400).json({ error: 'Cannot demote your own admin account' });
+  }
+
+  try {
+    const updatedUser = users.updateUser(userId, {
+      password: password && password.trim() ? password.trim() : undefined,
+      role: role === 'admin' ? 'admin' : (role === 'user' ? 'user' : undefined),
+    });
+
+    // If vaultAssignments provided, update vault memberships as well
+    if (Array.isArray(vaultAssignments)) {
+      const current = vaultMembers.listForUser(userId);
+      for (const c of current) {
+        await vaultMembers.removeMember(c.vaultId, userId);
+      }
+      for (const item of vaultAssignments) {
+        if (item && item.vaultId) {
+          const v = vaultsStore.getById(item.vaultId);
+          if (v && v.ownerId !== userId) {
+            const perm = item.permission === 'read-only' ? 'read-only' : 'read-write';
+            await vaultMembers.addOrUpdateMember(item.vaultId, userId, perm);
+          }
+        }
+      }
+    }
+
+    res.json({ ok: true, user: updatedUser });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.get('/users/:userId/vaults', (req, res) => {
   const { userId } = req.params;
   const user = users.findById(userId);

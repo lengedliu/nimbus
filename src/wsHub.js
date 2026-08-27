@@ -6,6 +6,8 @@ const vaults = require('./vaults');
 const storage = require('./storage');
 const syncRules = require('./syncRules');
 const syncLogger = require('./syncLogger');
+const devicesStore = require('./devices');
+const webhooks = require('./webhooks');
 
 /**
  * FNS realtime hub.
@@ -206,6 +208,18 @@ class FnsHub {
           });
           // Let other clients know a conflict copy was created.
           this.broadcastFileChange(vaultId, result.conflict, { currentHash: result.currentHash }, client.userId, true);
+
+          // Trigger webhook alert
+          const v = vaults.getById(vaultId);
+          webhooks.trigger('conflict.detected', {
+            vaultId,
+            vaultName: v ? v.name : vaultId,
+            path: msg.path,
+            conflictPath: result.conflict,
+            username: client.username,
+            deviceName: client.deviceName,
+          }).catch(() => {});
+
           return;
         }
 

@@ -295,6 +295,8 @@
       showMcpModal(currentVault ? currentVault.name : 'Default');
     });
 
+    setupGlobalSearch();
+
     await loadVaults();
   }
 
@@ -369,6 +371,8 @@
     renderVaultList();
     if (tab === 'settings') renderSettingsPanel();
     if (tab === 'database') renderDatabasePanel();
+    if (tab === 'webhooks') renderWebhooksPanel();
+    if (tab === 'devices') renderDevicesPanel();
     if (tab === 'synclogs') renderAdminSyncLogsPanel();
     if (tab === 'users') renderUsersPanel();
     if (tab === 'all-vaults') renderAllVaultsPanel();
@@ -376,19 +380,42 @@
 
   // ------------------------- Obsidian Connect Modal ---------------------------
 
-  function showObsidianConnectModal(vault) {
+  async function showObsidianConnectModal(vault) {
     const serverUrl = state.serverBase.replace(/\/$/, '');
     const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws';
     const vaultId = vault ? vault.id : (state.vaults[0]?.id || 'YOUR_VAULT_ID');
     const vaultName = vault ? vault.name : 'Vault';
 
-    const pluginConfig = {
-      serverUrl,
-      wsUrl,
-      vaultId,
-      vaultName,
-      authToken: state.token,
-    };
+    // Fetch device tokens for the user
+    let userTokens = [];
+    try {
+      const res = await api('/api/settings/tokens');
+      if (res.ok) {
+        const body = await res.json();
+        userTokens = body.tokens || [];
+      }
+    } catch {}
+
+    const tokenOptions = [
+      `<option value="${state.token}">🔑 当前主登录令牌 (${state.user?.username || 'Main User'})</option>`,
+      ...userTokens.map((t) => `<option value="${escapeHtml(t.token || state.token)}">📱 [专属设备] ${escapeHtml(t.label)} (${escapeHtml(t.maskedToken || '')})</option>`),
+    ].join('');
+
+    function buildConfig(selectedToken, deviceName) {
+      return {
+        serverUrl,
+        wsUrl: `${wsUrl}?vaultId=${vaultId}&token=${selectedToken}&deviceId=${encodeURIComponent(deviceName)}`,
+        vaultId,
+        vaultName,
+        authToken: selectedToken,
+        deviceName,
+        autoSyncOnStartup: true,
+      };
+    }
+
+    let currentToken = state.token;
+    let currentDevice = `${state.user?.username || 'Client'}-Obsidian`;
+    let pluginConfig = buildConfig(currentToken, currentDevice);
 
     const html = `
       <div class="modal-header">
@@ -396,39 +423,89 @@
         <button class="modal-close ghost">✕</button>
       </div>
       <div class="modal-body">
-        <p style="color:var(--text-secondary);margin-bottom:12px">
-          在 Obsidian 中安装 <code>nimbus</code> (或兼容的 <code>fast-note-sync</code>) 插件后，填写以下服务配置即可开启多端毫秒级实时同步：
+        <p style="color:var(--text-secondary);margin-bottom:14px">
+          在 Obsidian 中安装 <code>nimbus</code> (或兼容的 <code>fast-note-sync</code>) 插件后，将以下配置导入或填入插件设置，即可开启多端毫秒级实时双向同步：
         </p>
 
-        <div style="display:grid;grid-template-columns:100px 1fr;gap:8px 12px;font-size:13px;align-items:center;margin-bottom:16px;">
-          <span style="color:var(--muted)">服务器地址:</span>
-          <code>${escapeHtml(serverUrl)}</code>
-          <span style="color:var(--muted)">WebSocket:</span>
-          <code>${escapeHtml(wsUrl)}</code>
-          <span style="color:var(--muted)">当前 Vault:</span>
-          <b>${escapeHtml(vaultName)} (${vaultId})</b>
-          <span style="color:var(--muted)">认证 Token:</span>
-          <code style="word-break:break-all;font-size:11px">${state.token.slice(0, 24)}…</code>
+        <div style="background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;">
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:10px 12px;font-size:13px;align-items:center;">
+            <span style="color:var(--muted)">目标笔记库:</span>
+            <b>📓 ${escapeHtml(vaultName)} <code style="font-size:11px;font-weight:normal;color:var(--muted)">(${vaultId})</code></b>
+
+            <span style="color:var(--muted)">选择授权令牌:</span>
+            <select id="modal-token-select" style="margin:0;padding:5px 8px;font-size:12.5px;">
+              ${tokenOptions}
+            </select>
+
+            <span style="color:var(--muted)">客户端设备标识:</span>
+            <input type="text" id="modal-device-input" value="${escapeHtml(currentDevice)}" style="margin:0;padding:5px 8px;font-size:12.5px;" />
+
+            <span style="color:var(--muted)">当前完整 Token:</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="password" id="modal-token-preview" readonly value="${escapeHtml(currentToken)}" style="margin:0;padding:5px 8px;font-size:11.5px;font-family:ui-monospace,monospace;flex:1;" />
+              <button id="modal-token-toggle-btn" class="token-act-btn" style="padding:4px 8px;">👁️ 查看</button>
+              <button id="modal-token-copy-btn" class="token-act-btn primary" style="padding:4px 8px;">📋 复制 Token</button>
+            </div>
+          </div>
         </div>
 
-        <div class="nav-section-title">一键配置 JSON (可直接导入或参考)</div>
-        <pre class="code-snippet">${escapeHtml(JSON.stringify(pluginConfig, null, 2))}</pre>
+        <div class="nav-section-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span>一键插件配置文件 (<code>data.json</code>)</span>
+          <span style="font-size:11.5px;color:var(--muted);font-weight:normal;">保存在 .obsidian/plugins/nimbus/ 目录</span>
+        </div>
+        <pre id="modal-json-snippet" class="code-snippet" style="max-height:190px;">${escapeHtml(JSON.stringify(pluginConfig, null, 2))}</pre>
 
-        <p style="color:var(--muted);font-size:12px;margin-top:8px">
-          💡 提示：该配置支持全平台（Windows, macOS, Linux, iOS, Android）Obsidian 客户端。
+        <p style="color:var(--muted);font-size:12px;margin-top:10px">
+          💡 提示：支持全平台（macOS, Windows, iOS, Android, Linux）Obsidian 客户端，各端可独立设置设备标识与专属令牌。
         </p>
       </div>
       <div class="modal-footer">
-        <button id="copy-connect-btn" class="btn-primary">📋 复制完整连接参数</button>
+        <button id="copy-connect-btn" class="btn-primary">📋 一键复制 data.json 完整配置</button>
         <button class="modal-close secondary">关闭</button>
       </div>
     `;
 
     showModal(html, (dialog) => {
+      const tokenSelect = dialog.querySelector('#modal-token-select');
+      const deviceInput = dialog.querySelector('#modal-device-input');
+      const tokenPreview = dialog.querySelector('#modal-token-preview');
+      const tokenToggleBtn = dialog.querySelector('#modal-token-toggle-btn');
+      const tokenCopyBtn = dialog.querySelector('#modal-token-copy-btn');
+      const jsonSnippet = dialog.querySelector('#modal-json-snippet');
+
+      function updateModalState() {
+        currentToken = tokenSelect.value || state.token;
+        currentDevice = deviceInput.value.trim() || 'Obsidian-Device';
+        tokenPreview.value = currentToken;
+        pluginConfig = buildConfig(currentToken, currentDevice);
+        jsonSnippet.textContent = JSON.stringify(pluginConfig, null, 2);
+      }
+
+      tokenSelect.onchange = updateModalState;
+      deviceInput.oninput = updateModalState;
+
+      tokenToggleBtn.onclick = () => {
+        if (tokenPreview.type === 'password') {
+          tokenPreview.type = 'text';
+          tokenToggleBtn.textContent = '🙈 隐藏';
+        } else {
+          tokenPreview.type = 'password';
+          tokenToggleBtn.textContent = '👁️ 查看';
+        }
+      };
+
+      tokenCopyBtn.onclick = () => {
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(currentToken).then(() => toast('Token 已复制到剪贴板'));
+        } else {
+          prompt('复制 Token：', currentToken);
+        }
+      };
+
       dialog.querySelector('#copy-connect-btn').onclick = () => {
         const text = JSON.stringify(pluginConfig, null, 2);
         if (navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(text).then(() => toast('连接参数已复制'));
+          navigator.clipboard.writeText(text).then(() => toast('data.json 连接配置已复制到剪贴板！'));
         } else {
           prompt('复制以下配置：', text);
         }
@@ -527,6 +604,8 @@
     subtabsBar.className = 'subtabs-bar';
     subtabsBar.innerHTML = `
       <button class="subtab-btn ${state.activeSubtab === 'files' ? 'active' : ''}" data-sub="files">📄 笔记与文件</button>
+      <button class="subtab-btn ${state.activeSubtab === 'conflicts' ? 'active' : ''}" data-sub="conflicts" id="subtab-conflicts-btn">⚔️ 冲突解决中心</button>
+      <button class="subtab-btn ${state.activeSubtab === 'backups' ? 'active' : ''}" data-sub="backups">💾 快照与备份</button>
       <button class="subtab-btn ${state.activeSubtab === 'permissions' ? 'active' : ''}" data-sub="permissions">👥 成员与权限</button>
       <button class="subtab-btn ${state.activeSubtab === 'stats' ? 'active' : ''}" data-sub="stats">📊 统计与监控</button>
       <button class="subtab-btn ${state.activeSubtab === 'synclogs' ? 'active' : ''}" data-sub="synclogs">📋 同步日志</button>
@@ -535,6 +614,15 @@
       <button class="subtab-btn ${state.activeSubtab === 'trash' ? 'active' : ''}" data-sub="trash">🗑️ 回收站</button>
     `;
     mainPanel.appendChild(subtabsBar);
+
+    // Asynchronously check for active conflicts to show badge
+    api(`/api/vaults/${vaultId}/conflicts`).then((res) => res.json()).then((data) => {
+      const count = (data.conflicts || []).length;
+      const btn = subtabsBar.querySelector('#subtab-conflicts-btn');
+      if (btn && count > 0) {
+        btn.innerHTML = `⚔️ 冲突解决中心 <span class="conflict-badge">${count}</span>`;
+      }
+    }).catch(() => {});
 
     subtabsBar.querySelectorAll('.subtab-btn').forEach((btn) => {
       btn.onclick = () => {
@@ -560,6 +648,8 @@
 
     // Render active subtab
     if (state.activeSubtab === 'files') renderFilesSubtab(vaultId, contentBox);
+    else if (state.activeSubtab === 'conflicts') renderConflictsSubtab(vaultId, contentBox);
+    else if (state.activeSubtab === 'backups') renderBackupsSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'permissions') renderPermissionsSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'stats') renderStatsSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'synclogs') renderVaultSyncLogsSubtab(vaultId, contentBox);
@@ -1386,7 +1476,350 @@
     wrap.appendChild(table);
   }
 
-  // --------------------------- Subtab: Sync Logs (Vault Level) --------------
+  // --------------------------- Subtab: Conflicts Resolution Center -----------
+
+  async function renderConflictsSubtab(vaultId, container) {
+    container.innerHTML = '<div class="empty-state">检测冲突文件中…</div>';
+    try {
+      const res = await api(`/api/vaults/${vaultId}/conflicts`);
+      const { conflicts } = await res.json();
+
+      container.innerHTML = `
+        <div class="panel-header" style="margin-bottom:14px;">
+          <div>
+            <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:6px;">
+              <span>⚔️</span>
+              <span>多设备并发冲突解决中心</span>
+              ${conflicts.length > 0 ? `<span class="conflict-badge">${conflicts.length} 个未解决冲突</span>` : ''}
+            </h3>
+            <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">
+              当多台 Obsidian 客户端离线编辑同一笔记后同时连网推送时，服务端会自动创建分支冲突副本并保留两端数据，在此可一键比对差异与智能合并
+            </div>
+          </div>
+          <div>
+            <button class="secondary" id="conflicts-refresh-btn">🔄 重新检测</button>
+          </div>
+        </div>
+        <div id="conflicts-main-wrap"></div>
+      `;
+
+      container.querySelector('#conflicts-refresh-btn').onclick = () => renderConflictsSubtab(vaultId, container);
+
+      const wrap = container.querySelector('#conflicts-main-wrap');
+      if (conflicts.length === 0) {
+        wrap.innerHTML = `
+          <div class="empty-state" style="padding:48px 16px;">
+            <div style="font-size:40px;margin-bottom:10px;">✨</div>
+            <div style="font-weight:600;font-size:15px;color:var(--text);margin-bottom:4px;">笔记库暂无文件冲突</div>
+            <div style="font-size:13px;color:var(--muted)">所有多端同步数据均已正常统一</div>
+          </div>
+        `;
+        return;
+      }
+
+      for (const item of conflicts) {
+        const card = document.createElement('div');
+        card.className = 'conflict-card has-conflict';
+        card.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div>
+              <div style="font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                <span>⚠️ 冲突源文件:</span>
+                <code>${escapeHtml(item.basePath || '未知文件')}</code>
+              </div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
+                <span>冲突副本: <code>${escapeHtml(item.conflictPath)}</code></span>
+                <span style="margin-left:12px;color:var(--muted)">冲突时间: ${new Date(item.conflictMtime).toLocaleString()}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-primary open-diff-btn" style="font-size:12.5px;padding:5px 12px;">🔍 查看差异与合并</button>
+              <button class="danger delete-conflict-btn" style="font-size:12.5px;padding:5px 10px;">🗑️ 放弃此冲突副本</button>
+            </div>
+          </div>
+          <div class="conflict-diff-area hidden" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;"></div>
+        `;
+
+        card.querySelector('.delete-conflict-btn').onclick = async () => {
+          if (!confirm(`确定直接丢弃冲突副本 "${item.conflictPath}"？`)) return;
+          try {
+            await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ conflictPath: item.conflictPath, resolution: 'keep-current' }),
+            });
+            toast('已丢弃冲突副本');
+            renderConflictsSubtab(vaultId, container);
+          } catch (e) {
+            toast('操作失败: ' + e.message);
+          }
+        };
+
+        const diffArea = card.querySelector('.conflict-diff-area');
+        const openDiffBtn = card.querySelector('.open-diff-btn');
+
+        openDiffBtn.onclick = async () => {
+          if (!diffArea.classList.contains('hidden')) {
+            diffArea.classList.add('hidden');
+            openDiffBtn.textContent = '🔍 查看差异与合并';
+            return;
+          }
+
+          diffArea.classList.remove('hidden');
+          diffArea.innerHTML = '<div class="empty-state" style="padding:16px;">加载差异比对中…</div>';
+          openDiffBtn.textContent = '收起差异面板 ▲';
+
+          try {
+            const diffRes = await api(`/api/vaults/${vaultId}/conflicts/diff?conflictPath=${encodeURIComponent(item.conflictPath)}`);
+            const diffData = await diffRes.json();
+
+            if (!diffData.isText) {
+              diffArea.innerHTML = `
+                <div style="padding:12px;background:var(--panel-2);border-radius:6px;font-size:13px;">
+                  <p>该文件为二进制媒体或附件文件，无法进行纯文本差异比对。</p>
+                  <div style="display:flex;gap:8px;margin-top:10px;">
+                    <button class="secondary act-keep-current">🛡️ 保留服务端当前版本</button>
+                    <button class="btn-primary act-keep-conflict">⚡ 采用客户端冲突副本覆盖</button>
+                  </div>
+                </div>
+              `;
+              diffArea.querySelector('.act-keep-current').onclick = async () => {
+                await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ conflictPath: item.conflictPath, resolution: 'keep-current' }),
+                });
+                toast('已保留服务端当前版本');
+                renderConflictsSubtab(vaultId, container);
+              };
+              diffArea.querySelector('.act-keep-conflict').onclick = async () => {
+                await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ conflictPath: item.conflictPath, resolution: 'keep-conflict' }),
+                });
+                toast('已采用冲突版本覆盖');
+                renderConflictsSubtab(vaultId, container);
+              };
+              return;
+            }
+
+            diffArea.innerHTML = `
+              <div class="conflict-diff-container">
+                <div class="diff-pane">
+                  <div class="diff-pane-header server">
+                    <span>🖥️ 服务端当前版本 (Server Current)</span>
+                    <span style="font-weight:normal;font-size:11px;opacity:0.8">${formatBytes(diffData.baseSize)}</span>
+                  </div>
+                  <div class="diff-pane-content">${escapeHtml(diffData.baseContent || '(空文件或未创建)')}</div>
+                </div>
+                <div class="diff-pane">
+                  <div class="diff-pane-header client">
+                    <span>📱 客户端上传冲突版本 (Client Conflict)</span>
+                    <span style="font-weight:normal;font-size:11px;opacity:0.8">${formatBytes(diffData.conflictSize)}</span>
+                  </div>
+                  <div class="diff-pane-content">${escapeHtml(diffData.conflictContent)}</div>
+                </div>
+              </div>
+
+              <div class="conflict-actions-bar">
+                <span style="font-size:12.5px;font-weight:600;color:var(--text);margin-right:4px;">⚡ 快速解决策略:</span>
+                <button class="secondary act-keep-current" title="丢弃冲突副本，维持服务端现有文件">🛡️ 保留当前版本</button>
+                <button class="secondary act-keep-conflict" title="使用客户端冲突副本覆盖现有文件">⚡ 采纳冲突版本</button>
+                <button class="btn-primary act-merge-both" title="将两份笔记内容按标记合并至同一文件中">🔀 智能合并两者 (带标记)</button>
+                <button class="secondary act-custom-edit" title="在网页上直接编辑最终合并内容">✍️ 手动编辑合并</button>
+              </div>
+
+              <div class="custom-edit-box hidden" style="margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                  <span style="font-size:13px;font-weight:600;">自定义最终合并内容:</span>
+                  <button class="btn-primary act-save-custom" style="padding:4px 12px;font-size:12px;">💾 保存并解决冲突</button>
+                </div>
+                <textarea class="custom-merge-textarea" rows="12" style="width:100%;font-family:ui-monospace,monospace;font-size:12.5px;background:var(--panel-2);">${escapeHtml(diffData.mergedPreview)}</textarea>
+              </div>
+            `;
+
+            diffArea.querySelector('.act-keep-current').onclick = async () => {
+              await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conflictPath: item.conflictPath, resolution: 'keep-current' }),
+              });
+              toast('已解决：保留当前版本');
+              renderConflictsSubtab(vaultId, container);
+            };
+
+            diffArea.querySelector('.act-keep-conflict').onclick = async () => {
+              await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conflictPath: item.conflictPath, resolution: 'keep-conflict' }),
+              });
+              toast('已解决：采用冲突版本覆盖');
+              renderConflictsSubtab(vaultId, container);
+            };
+
+            diffArea.querySelector('.act-merge-both').onclick = async () => {
+              await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conflictPath: item.conflictPath, resolution: 'merge-both' }),
+              });
+              toast('已解决：已将两份笔记内容合并保存');
+              renderConflictsSubtab(vaultId, container);
+            };
+
+            const customEditBox = diffArea.querySelector('.custom-edit-box');
+            diffArea.querySelector('.act-custom-edit').onclick = () => {
+              customEditBox.classList.toggle('hidden');
+            };
+
+            diffArea.querySelector('.act-save-custom').onclick = async () => {
+              const text = customEditBox.querySelector('.custom-merge-textarea').value;
+              await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  conflictPath: item.conflictPath,
+                  resolution: 'custom',
+                  customContent: text,
+                }),
+              });
+              toast('已解决：已保存自定义合并内容');
+              renderConflictsSubtab(vaultId, container);
+            };
+          } catch (err) {
+            diffArea.innerHTML = `<div class="empty-state" style="color:#e74c3c;">获取差异比对失败: ${escapeHtml(err.message)}</div>`;
+          }
+        };
+
+        wrap.appendChild(card);
+      }
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载冲突解决中心失败: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  // --------------------------- Subtab: Backups & Snapshots -------------------
+
+  async function renderBackupsSubtab(vaultId, container) {
+    container.innerHTML = '<div class="empty-state">加载快照与备份中…</div>';
+    try {
+      const res = await api(`/api/vaults/${vaultId}/backups`);
+      const { backups } = await res.json();
+
+      container.innerHTML = `
+        <div class="panel-header" style="margin-bottom:14px;">
+          <div>
+            <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:6px;">
+              <span>💾</span>
+              <span>全库快照与归档备份</span>
+            </h3>
+            <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">
+              创建当前 Vault 的全量 ZIP 打包快照，支持按需一键下载或历史版本归档恢复
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-primary" id="create-snapshot-btn">📸 立即创建全库快照</button>
+            <button class="secondary" id="export-live-zip-btn">📦 实时导出 ZIP</button>
+          </div>
+        </div>
+        <div id="backups-list-wrap"></div>
+      `;
+
+      container.querySelector('#create-snapshot-btn').onclick = async () => {
+        const label = prompt('请输入快照备注名称 (例如：版本发布前备份、每月归档):', '手动快照');
+        if (label === null) return;
+        try {
+          toast('正在生成全库 ZIP 快照，请稍候…');
+          const r = await api(`/api/vaults/${vaultId}/backups`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label: label.trim() || '手动快照' }),
+          });
+          const body = await r.json();
+          if (body.ok) {
+            toast('全库快照创建成功！');
+            renderBackupsSubtab(vaultId, container);
+          }
+        } catch (e) {
+          toast('快照创建失败: ' + e.message);
+        }
+      };
+
+      container.querySelector('#export-live-zip-btn').onclick = () => {
+        window.open(`${state.serverBase.replace(/\/$/, '')}/api/vaults/${vaultId}/export?token=${state.token}`, '_blank');
+      };
+
+      const wrap = container.querySelector('#backups-list-wrap');
+      if (backups.length === 0) {
+        wrap.innerHTML = `
+          <div class="empty-state" style="padding:48px 16px;">
+            <div style="font-size:40px;margin-bottom:10px;">📦</div>
+            <div style="font-weight:600;font-size:15px;color:var(--text);margin-bottom:4px;">暂无历史快照备份</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">点击右上角「立即创建全库快照」即可一键将当前 Vault 打包存档</div>
+          </div>
+        `;
+        return;
+      }
+
+      const table = document.createElement('table');
+      table.className = 'data-table';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>快照文件名</th>
+            <th>备注说明</th>
+            <th>大小</th>
+            <th>创建时间</th>
+            <th style="text-align:right">操作</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+      const tbody = table.querySelector('tbody');
+
+      for (const b of backups) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>
+            <div style="font-weight:600;font-size:13px;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span>📦</span>
+              <code>${escapeHtml(b.filename)}</code>
+            </div>
+          </td>
+          <td><span class="badge primary" style="font-size:11px;">${escapeHtml(b.label || '全库快照')}</span></td>
+          <td class="meta">${formatBytes(b.size)}</td>
+          <td class="meta">${new Date(b.createdAt).toLocaleString()}</td>
+          <td class="actions" style="text-align:right">
+            <button class="secondary dl-backup-btn" data-id="${b.id}" style="font-size:12px;padding:3px 10px;">⬇️ 下载 ZIP</button>
+            <button class="danger del-backup-btn" data-id="${b.id}" style="font-size:12px;padding:3px 8px;margin-left:4px;">🗑️ 删除</button>
+          </td>
+        `;
+
+        tr.querySelector('.dl-backup-btn').onclick = () => {
+          window.open(`${state.serverBase.replace(/\/$/, '')}/api/vaults/${vaultId}/backups/${b.id}/download?token=${state.token}`, '_blank');
+        };
+
+        tr.querySelector('.del-backup-btn').onclick = async () => {
+          if (!confirm(`确定删除快照备份 "${b.filename}"？`)) return;
+          try {
+            await api(`/api/vaults/${vaultId}/backups/${b.id}`, { method: 'DELETE' });
+            toast('快照备份已删除');
+            renderBackupsSubtab(vaultId, container);
+          } catch (e) {
+            toast('删除失败: ' + e.message);
+          }
+        };
+
+        tbody.appendChild(tr);
+      }
+
+      wrap.appendChild(table);
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载快照列表失败: ${escapeHtml(err.message)}</div>`;
+    }
+  }
 
   async function renderVaultSyncLogsSubtab(vaultId, container) {
     container.innerHTML = '<div class="empty-state">加载同步日志中…</div>';
@@ -2152,11 +2585,11 @@
         <td style="max-width:320px;">${vaultsBadgeHtml}</td>
         <td class="meta">${new Date(u.createdAt).toLocaleString()}</td>
         <td class="actions" style="text-align:right">
-          <button class="secondary edit-user-vaults-btn" data-user-id="${u.id}" style="font-size:12px;padding:4px 10px;">📂 权限配置</button>
+          <button class="secondary edit-user-btn" data-user-id="${u.id}" style="font-size:12px;padding:4px 10px;">✏️ 编辑用户</button>
         </td>
       `;
 
-      tr.querySelector('.edit-user-vaults-btn').onclick = () => openUserVaultsModal(u);
+      tr.querySelector('.edit-user-btn').onclick = () => openEditUserModal(u);
 
       if (u.id !== state.user.id) {
         const del = document.createElement('button');
@@ -2175,30 +2608,78 @@
     wrap.appendChild(table);
   }
 
-  // --------------------------- Modal: User Vault Permissions -----------------
+  // --------------------------- Modal: Edit User & Vault Permissions ----------
 
-  async function openUserVaultsModal(targetUser) {
-    let modal = $('#user-vaults-modal');
+  async function openEditUserModal(targetUser) {
+    let modal = $('#edit-user-modal');
     if (modal) modal.remove();
 
+    const isSelf = targetUser.id === state.user.id;
+
     modal = document.createElement('div');
-    modal.id = 'user-vaults-modal';
+    modal.id = 'edit-user-modal';
     modal.className = 'modal-backdrop';
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(3px);padding:16px;';
     modal.innerHTML = `
-      <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);width:100%;max-width:540px;padding:24px;box-shadow:0 12px 36px rgba(0,0,0,0.4);max-height:85vh;display:flex;flex-direction:column;">
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);width:100%;max-width:580px;padding:24px;box-shadow:0 12px 36px rgba(0,0,0,0.4);max-height:88vh;display:flex;flex-direction:column;">
         <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px;">
           <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:6px;">
-            <span>📂</span>
-            <span>配置用户 Vault 访问权限: <b>${escapeHtml(targetUser.username)}</b></span>
+            <span>✏️</span>
+            <span>编辑用户: <b>${escapeHtml(targetUser.username)}</b></span>
           </h3>
           <button id="modal-close-btn" class="secondary" style="padding:4px 8px;font-size:12px;">✕</button>
         </div>
-        <div id="modal-vaults-content" style="flex:1;overflow-y:auto;padding-right:4px;">
-          <div class="empty-state">加载中…</div>
+
+        <div style="flex:1;overflow-y:auto;padding-right:4px;display:flex;flex-direction:column;gap:18px;">
+          <!-- 1. Basic Info Section -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px;">
+              <span>👤</span> 基础账号信息
+            </div>
+            <div style="grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;display:grid;">
+              <label style="margin:0;">
+                <span style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                  <span>用户名</span>
+                  <span style="font-size:11px;color:var(--muted);">🔒 已创建用户禁止修改用户名</span>
+                </span>
+                <input id="eu-username" value="${escapeHtml(targetUser.username)}" readonly disabled style="margin:0;background:var(--panel-2);color:var(--text-secondary);cursor:not-allowed;border-color:var(--border);" />
+              </label>
+              <label style="margin:0;">
+                <span style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">重置密码 (留空保持原密码不变)</span>
+                <input id="eu-password" type="password" placeholder="若无需重置请留空" style="margin:0;" />
+              </label>
+            </div>
+
+            <div style="margin-top:12px;">
+              <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px;">用户角色权限</label>
+              <select id="eu-role" style="margin:0;max-width:240px;" ${isSelf ? 'disabled' : ''}>
+                <option value="user" ${targetUser.role !== 'admin' ? 'selected' : ''}>普通用户 (User)</option>
+                <option value="admin" ${targetUser.role === 'admin' ? 'selected' : ''}>系统管理员 (Admin)</option>
+              </select>
+              ${isSelf ? '<div style="font-size:11px;color:var(--muted);margin-top:4px;">💡 正在编辑自身账号，无法降级管理员权限</div>' : ''}
+            </div>
+          </div>
+
+          <!-- 2. Vault Permissions Section -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;">
+                <span>📂</span> Vault 笔记库权限授权
+              </span>
+              <div style="font-size:12px;display:flex;gap:6px;">
+                <button type="button" id="eu-select-all-vaults" class="secondary" style="padding:2px 8px;font-size:11px;">全选</button>
+                <button type="button" id="eu-clear-vaults" class="secondary" style="padding:2px 8px;font-size:11px;">清空</button>
+              </div>
+            </div>
+
+            <div id="modal-vaults-content" style="display:flex;flex-direction:column;gap:8px;">
+              <div class="empty-state" style="padding:16px;">加载 Vault 列表中…</div>
+            </div>
+          </div>
         </div>
+
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
-          <span style="font-size:12px;color:var(--muted);">支持分配多个笔记库的只读或读写权限</span>
+          <span style="font-size:12px;color:var(--muted);">修改将即时生效</span>
           <div style="display:flex;gap:8px;">
             <button id="modal-cancel-btn" class="secondary">取消</button>
             <button id="modal-save-btn" class="btn-primary">保存修改</button>
@@ -2214,52 +2695,57 @@
     modal.querySelector('#modal-cancel-btn').onclick = close;
     modal.onclick = (e) => { if (e.target === modal) close(); };
 
+    modal.querySelector('#eu-select-all-vaults')?.addEventListener('click', () => {
+      modal.querySelectorAll('.m-vault-chk:not(:disabled)').forEach((chk) => { chk.checked = true; });
+    });
+    modal.querySelector('#eu-clear-vaults')?.addEventListener('click', () => {
+      modal.querySelectorAll('.m-vault-chk:not(:disabled)').forEach((chk) => { chk.checked = false; });
+    });
+
     try {
       const res = await api(`/api/admin/users/${targetUser.id}/vaults`);
       const { vaults } = await res.json();
       const content = modal.querySelector('#modal-vaults-content');
 
       if (!vaults || vaults.length === 0) {
-        content.innerHTML = '<div class="empty-state">系统内暂无 Vault</div>';
-        return;
+        content.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0;">系统内暂无 Vault</div>';
+      } else {
+        content.innerHTML = vaults.map((v) => {
+          const isOwner = v.isOwner;
+          const isAssigned = v.assigned;
+          const isRw = v.permission === 'read-write';
+
+          return `
+            <div class="modal-vault-row" style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:${isOwner ? 'default' : 'pointer'};flex:1;overflow:hidden;">
+                <input type="checkbox" class="m-vault-chk" data-vault-id="${v.id}" ${isAssigned ? 'checked' : ''} ${isOwner ? 'disabled' : ''} />
+                <div style="overflow:hidden;">
+                  <div style="font-weight:500;font-size:13px;display:flex;align-items:center;gap:6px;">
+                    <span>📓 ${escapeHtml(v.name)}</span>
+                    ${isOwner ? '<span class="badge primary" style="font-size:10px;">所有者</span>' : ''}
+                  </div>
+                  <div style="font-size:10.5px;color:var(--muted);margin-top:1px;">ID: ${v.id}</div>
+                </div>
+              </label>
+              <div>
+                ${isOwner ? `
+                  <span class="badge primary" style="font-size:11px;">全部权限</span>
+                ` : `
+                  <select class="m-vault-perm" data-vault-id="${v.id}" style="padding:2px 6px;font-size:12px;border-radius:4px;margin:0;width:auto;">
+                    <option value="read-write" ${isRw ? 'selected' : ''}>✏️ 读写 (Read-Write)</option>
+                    <option value="read-only" ${!isRw ? 'selected' : ''}>👁️ 只读 (Read-Only)</option>
+                  </select>
+                `}
+              </div>
+            </div>
+          `;
+        }).join('');
       }
 
-      content.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          ${vaults.map((v) => {
-            const isOwner = v.isOwner;
-            const isAssigned = v.assigned;
-            const isRw = v.permission === 'read-write';
-
-            return `
-              <div class="modal-vault-row" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:${isOwner ? 'default' : 'pointer'};flex:1;overflow:hidden;">
-                  <input type="checkbox" class="m-vault-chk" data-vault-id="${v.id}" ${isAssigned ? 'checked' : ''} ${isOwner ? 'disabled' : ''} />
-                  <div style="overflow:hidden;">
-                    <div style="font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;">
-                      <span>📓 ${escapeHtml(v.name)}</span>
-                      ${isOwner ? '<span class="badge primary" style="font-size:10px;">所有者</span>' : ''}
-                    </div>
-                    <div style="font-size:11px;color:var(--muted);margin-top:2px;">ID: ${v.id}</div>
-                  </div>
-                </label>
-                <div>
-                  ${isOwner ? `
-                    <span class="badge primary" style="font-size:11px;">全部权限</span>
-                  ` : `
-                    <select class="m-vault-perm" data-vault-id="${v.id}" style="padding:4px 8px;font-size:12px;border-radius:4px;margin:0;">
-                      <option value="read-write" ${isRw ? 'selected' : ''}>✏️ 读写 (Read-Write)</option>
-                      <option value="read-only" ${!isRw ? 'selected' : ''}>👁️ 只读 (Read-Only)</option>
-                    </select>
-                  `}
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-
       modal.querySelector('#modal-save-btn').onclick = async () => {
+        const password = modal.querySelector('#eu-password').value;
+        const role = modal.querySelector('#eu-role').value;
+
         const vaultAssignments = [];
         modal.querySelectorAll('.m-vault-chk:checked').forEach((chk) => {
           if (chk.disabled) return; // Skip owner
@@ -2270,12 +2756,21 @@
         });
 
         try {
-          await api(`/api/admin/users/${targetUser.id}/vaults`, {
+          const updateRes = await api(`/api/admin/users/${targetUser.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ vaultAssignments }),
+            body: JSON.stringify({
+              password: password || undefined,
+              role,
+              vaultAssignments,
+            }),
           });
-          toast(`已更新 "${targetUser.username}" 的 Vault 权限`);
+          const updateBody = await updateRes.json();
+          if (!updateRes.ok || updateBody.error) {
+            throw new Error(updateBody.error || '更新失败');
+          }
+
+          toast(`已成功更新用户 "${targetUser.username}" 的信息与权限`);
           close();
           renderUsersPanel();
         } catch (e) {
@@ -2636,6 +3131,477 @@
     }
   }
 
+  // --------------------------- Devices Management Panel ---------------------
+
+  async function renderDevicesPanel() {
+    mainPanel.innerHTML = '<div class="empty-state">加载接入设备列表中…</div>';
+    try {
+      const res = await api('/api/devices');
+      const data = await res.json();
+      const devices = data.devices || [];
+      const isAdmin = state.user?.role === 'admin';
+
+      mainPanel.innerHTML = `
+        <div class="panel-header" style="margin-bottom:16px;">
+          <div>
+            <h2 style="margin:0 0 4px;font-size:20px;display:flex;align-items:center;gap:10px;">
+              <span>📱</span>
+              <span>接入设备与多端令牌管理</span>
+            </h2>
+            <div style="font-size:13px;color:var(--muted)">
+              监控与管理连接至 Obsidian Nimbus 同步服务的客户端设备、在线状态、专用授权 Token 及最后活动记录
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-primary" id="add-device-btn">➕ 生成新设备令牌</button>
+            <button class="secondary" id="refresh-devices-btn">🔄 刷新列表</button>
+          </div>
+        </div>
+
+        <div id="devices-list-grid" class="devices-grid"></div>
+      `;
+
+      mainPanel.querySelector('#refresh-devices-btn').onclick = () => renderDevicesPanel();
+      mainPanel.querySelector('#add-device-btn').onclick = () => openCreateDeviceModal();
+
+      const grid = mainPanel.querySelector('#devices-list-grid');
+      if (devices.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1 / -1; padding: 48px 16px;">
+            <div style="font-size:40px;margin-bottom:10px;">📱</div>
+            <div style="font-weight:600;font-size:15px;color:var(--text);margin-bottom:4px;">暂无登记的客户端设备</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">点击右上角「生成新设备令牌」为您的 Mac、Windows、iPhone 或 Android 生成独立连接令牌</div>
+          </div>
+        `;
+        return;
+      }
+
+      for (const dev of devices) {
+        const card = document.createElement('div');
+        card.className = `device-card ${dev.isOnline ? 'online' : ''}`;
+        
+        const platformIcon = dev.platform === 'ios' ? '🍎' : dev.platform === 'android' ? '🤖' : dev.platform === 'windows' ? '🪟' : dev.platform === 'macos' ? '🍏' : dev.platform === 'linux' ? '🐧' : '💻';
+        const lastActiveText = dev.lastActiveAt ? new Date(dev.lastActiveAt).toLocaleString() : '从未使用';
+
+        card.innerHTML = `
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:24px;">${platformIcon}</span>
+              <div>
+                <div style="font-weight:600;font-size:15px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                  <span>${escapeHtml(dev.name || dev.deviceId)}</span>
+                  ${dev.isOnline ? '<span class="badge success" style="font-size:10px;">🟢 在线</span>' : '<span class="badge" style="font-size:10px;color:var(--muted)">⚪ 离线</span>'}
+                </div>
+                <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">
+                  设备 ID: <code>${escapeHtml(dev.deviceId)}</code>
+                </div>
+              </div>
+            </div>
+            ${isAdmin && dev.username ? `<span class="badge primary" style="font-size:10.5px;">👤 ${escapeHtml(dev.username)}</span>` : ''}
+          </div>
+
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--muted)">最后同步活跃:</span>
+              <span>${lastActiveText}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:var(--muted)">客户端 IP:</span>
+              <code>${escapeHtml(dev.lastIp || '未知')}</code>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:var(--muted)">专属 Token:</span>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <code style="font-size:11px;">${escapeHtml(dev.tokenPreview || '••••••••••••')}</code>
+                <button class="secondary copy-token-btn" data-token="${escapeHtml(dev.token || '')}" style="padding:1px 6px;font-size:11px;">📋 复制</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <button class="secondary get-config-btn" style="font-size:12px;padding:4px 10px;">⚡ 获取配置</button>
+            <button class="danger revoke-dev-btn" data-id="${dev.id}" style="font-size:12px;padding:4px 10px;">🚫 撤销授权 / 断开</button>
+          </div>
+        `;
+
+        card.querySelector('.copy-token-btn')?.addEventListener('click', (e) => {
+          const t = e.target.dataset.token;
+          if (t) {
+            navigator.clipboard.writeText(t);
+            toast('Token 已复制到剪贴板');
+          } else {
+            toast('令牌已脱敏保存');
+          }
+        });
+
+        card.querySelector('.get-config-btn')?.addEventListener('click', () => {
+          const currentVault = state.vaults[0];
+          showObsidianConnectModal(currentVault);
+        });
+
+        card.querySelector('.revoke-dev-btn')?.addEventListener('click', async () => {
+          if (!confirm(`确定撤销设备 "${dev.name || dev.deviceId}" 的访问授权？该设备将被立即踢下线并停止同步。`)) return;
+          try {
+            await api(`/api/devices/${dev.id}`, { method: 'DELETE' });
+            toast('设备授权已撤销');
+            renderDevicesPanel();
+          } catch (e) {
+            toast('操作失败: ' + e.message);
+          }
+        });
+
+        grid.appendChild(card);
+      }
+    } catch (err) {
+      mainPanel.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载设备管理失败: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function openCreateDeviceModal() {
+    const modalHtml = `
+      <div class="modal-header">
+        <h3>➕ 生成新设备独立授权令牌</h3>
+        <button class="modal-close ghost">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+          为每个终端（例如办公室电脑、个人笔记本、手机）分配独立的连接令牌，可随时单独撤销或审计活动状态。
+        </p>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <label>设备名称 (例如: MacBook Pro M3, 办公台式机, iPhone 15)
+            <input type="text" id="nd-name" placeholder="请输入设备名称" />
+          </label>
+          <label>终端平台类型
+            <select id="nd-platform">
+              <option value="macos">🍏 macOS</option>
+              <option value="windows">🪟 Windows</option>
+              <option value="linux">🐧 Linux</option>
+              <option value="ios">🍎 iOS (iPhone / iPad)</option>
+              <option value="android">🤖 Android</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
+        <button class="secondary modal-close">取消</button>
+        <button class="btn-primary" id="nd-submit-btn">立即生成令牌</button>
+      </div>
+    `;
+
+    openModal(modalHtml, (container) => {
+      container.querySelector('#nd-submit-btn').onclick = async () => {
+        const name = container.querySelector('#nd-name').value.trim();
+        const platform = container.querySelector('#nd-platform').value;
+        if (!name) {
+          toast('请输入设备名称');
+          return;
+        }
+
+        try {
+          const res = await api('/api/devices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, platform }),
+          });
+          const body = await res.json();
+          closeModal();
+          toast(`设备 "${name}" 令牌生成成功！`);
+          renderDevicesPanel();
+        } catch (e) {
+          toast('生成失败: ' + e.message);
+        }
+      };
+    });
+  }
+
+  // --------------------------- Webhooks Management Panel --------------------
+
+  async function renderWebhooksPanel() {
+    mainPanel.innerHTML = '<div class="empty-state">加载 Webhook 配置中…</div>';
+    try {
+      const res = await api('/api/settings/webhooks');
+      const data = await res.json();
+      const config = data.webhooks || {
+        enabled: false,
+        platform: 'custom',
+        url: '',
+        secret: '',
+        events: ['conflict.detected', 'conflict.resolved', 'backup.created'],
+      };
+
+      mainPanel.innerHTML = `
+        <div class="panel-header" style="margin-bottom:16px;">
+          <div>
+            <h2 style="margin:0 0 4px;font-size:20px;display:flex;align-items:center;gap:10px;">
+              <span>🔔</span>
+              <span>Webhook 告警与实时第三方推送</span>
+            </h2>
+            <div style="font-size:13px;color:var(--muted)">
+              当多端发生并发冲突、全库快照备份完成、新设备上线或文件变动时，实时推送告警消息至飞书、钉钉、企业微信、Discord 或自定义 HTTP 终端
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="secondary" id="wh-test-btn">🧪 发送测试通知</button>
+            <button class="btn-primary" id="wh-save-btn">💾 保存 Webhook 配置</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:20px;">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
+            <h3 style="margin:0 0 16px;font-size:15px;display:flex;align-items:center;gap:8px;">
+              <span>⚙️</span> Webhook 推送端点配置
+            </h3>
+
+            <div style="display:flex;flex-direction:column;gap:14px;">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;">
+                <input type="checkbox" id="wh-enabled" ${config.enabled ? 'checked' : ''} style="width:auto;margin:0;" />
+                <span style="font-weight:600;font-size:13.5px;">启用 Webhook 告警通知功能</span>
+              </label>
+
+              <label>
+                <span style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">推送目标平台</span>
+                <select id="wh-platform" style="margin:0;">
+                  <option value="feishu" ${config.platform === 'feishu' ? 'selected' : ''}>🕊️ 飞书群机器人 (Feishu Webhook)</option>
+                  <option value="dingtalk" ${config.platform === 'dingtalk' ? 'selected' : ''}>🎯 钉钉自定义机器人 (DingTalk Webhook)</option>
+                  <option value="wecom" ${config.platform === 'wecom' ? 'selected' : ''}>💬 企业微信群机器人 (WeCom Webhook)</option>
+                  <option value="discord" ${config.platform === 'discord' ? 'selected' : ''}>🎮 Discord Webhook</option>
+                  <option value="custom" ${config.platform === 'custom' ? 'selected' : ''}>🌐 自定义 HTTP POST JSON 终端</option>
+                </select>
+              </label>
+
+              <label>
+                <span style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Webhook 回调 URL 地址</span>
+                <input type="text" id="wh-url" value="${escapeHtml(config.url || '')}" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx" style="margin:0;" />
+                <div style="font-size:11.5px;color:var(--muted);margin-top:4px;">接收 Nimbus 发送 POST 请求的完整 Webhook 链接</div>
+              </label>
+
+              <label>
+                <span style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">签名校验密钥 (Secret / 签名密钥, 可选)</span>
+                <input type="password" id="wh-secret" value="${escapeHtml(config.secret || '')}" placeholder="若机器人启用了安全加签校验请输入" style="margin:0;" />
+              </label>
+            </div>
+          </div>
+
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
+            <h3 style="margin:0 0 16px;font-size:15px;display:flex;align-items:center;gap:8px;">
+              <span>📡</span> 订阅触发事件 (Event Subscriptions)
+            </h3>
+
+            <div style="display:flex;flex-direction:column;gap:12px;" id="wh-events-container">
+              <label class="form-checkbox-label" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;">
+                <input type="checkbox" class="wh-event-chk" value="conflict.detected" ${config.events?.includes('conflict.detected') ? 'checked' : ''} />
+                <div>
+                  <div style="font-weight:500;font-size:13px;">⚔️ conflict.detected (检测到多设备并发冲突)</div>
+                  <div style="font-size:11.5px;color:var(--muted)">当两台设备同时编辑同一笔记并在同步中产生冲突副本时触发</div>
+                </div>
+              </label>
+
+              <label class="form-checkbox-label" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;">
+                <input type="checkbox" class="wh-event-chk" value="conflict.resolved" ${config.events?.includes('conflict.resolved') ? 'checked' : ''} />
+                <div>
+                  <div style="font-weight:500;font-size:13px;">✓ conflict.resolved (冲突已成功解决)</div>
+                  <div style="font-size:11.5px;color:var(--muted)">当管理员或用户在控制台手动合并或采纳冲突版本后触发</div>
+                </div>
+              </label>
+
+              <label class="form-checkbox-label" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;">
+                <input type="checkbox" class="wh-event-chk" value="backup.created" ${config.events?.includes('backup.created') ? 'checked' : ''} />
+                <div>
+                  <div style="font-weight:500;font-size:13px;">💾 backup.created (全库快照备份完成)</div>
+                  <div style="font-size:11.5px;color:var(--muted)">当系统或用户完成全库 ZIP 归档快照创建时触发</div>
+                </div>
+              </label>
+
+              <label class="form-checkbox-label" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;">
+                <input type="checkbox" class="wh-event-chk" value="device.connected" ${config.events?.includes('device.connected') ? 'checked' : ''} />
+                <div>
+                  <div style="font-weight:500;font-size:13px;">📱 device.connected (新设备接入与上线)</div>
+                  <div style="font-size:11.5px;color:var(--muted)">当有新客户端设备首次接入或发起全量同步时触发</div>
+                </div>
+              </label>
+
+              <label class="form-checkbox-label" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;">
+                <input type="checkbox" class="wh-event-chk" value="file.deleted" ${config.events?.includes('file.deleted') ? 'checked' : ''} />
+                <div>
+                  <div style="font-weight:500;font-size:13px;">🗑️ file.deleted (文件移入回收站)</div>
+                  <div style="font-size:11.5px;color:var(--muted)">当客户端同步删除文件或用户从控制台删除笔记时触发</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="wh-test-result" style="margin-top:16px;"></div>
+      `;
+
+      mainPanel.querySelector('#wh-test-btn').onclick = async () => {
+        const url = mainPanel.querySelector('#wh-url').value.trim();
+        const platform = mainPanel.querySelector('#wh-platform').value;
+        const secret = mainPanel.querySelector('#wh-secret').value.trim();
+        const resDiv = mainPanel.querySelector('#wh-test-result');
+
+        if (!url) {
+          toast('请先填写 Webhook 回调 URL 地址');
+          return;
+        }
+
+        resDiv.innerHTML = '<span style="color:var(--muted);font-size:13px;">正在发送测试通知消息…</span>';
+        try {
+          const r = await api('/api/settings/webhooks/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, platform, secret }),
+          });
+          const b = await r.json();
+          if (b.ok) {
+            resDiv.innerHTML = `<div style="padding:10px 14px;background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.3);border-radius:6px;color:#2ecc71;font-size:13px;">✓ 测试通知发送成功！响应状态: ${b.status}</div>`;
+            toast('测试通知发送成功');
+          } else {
+            resDiv.innerHTML = `<div style="padding:10px 14px;background:rgba(231,76,60,0.15);border:1px solid rgba(231,76,60,0.3);border-radius:6px;color:#e74c3c;font-size:13px;">✕ 推送失败: ${escapeHtml(b.error || '无法投递')}</div>`;
+          }
+        } catch (e) {
+          resDiv.innerHTML = `<div style="padding:10px 14px;background:rgba(231,76,60,0.15);border:1px solid rgba(231,76,60,0.3);border-radius:6px;color:#e74c3c;font-size:13px;">✕ 请求错误: ${escapeHtml(e.message)}</div>`;
+        }
+      };
+
+      mainPanel.querySelector('#wh-save-btn').onclick = async () => {
+        const enabled = mainPanel.querySelector('#wh-enabled').checked;
+        const platform = mainPanel.querySelector('#wh-platform').value;
+        const url = mainPanel.querySelector('#wh-url').value.trim();
+        const secret = mainPanel.querySelector('#wh-secret').value.trim();
+        const events = [];
+        mainPanel.querySelectorAll('.wh-event-chk:checked').forEach((c) => events.push(c.value));
+
+        try {
+          await api('/api/settings/webhooks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled, platform, url, secret, events }),
+          });
+          toast('Webhook 配置已保存');
+          renderWebhooksPanel();
+        } catch (e) {
+          toast('保存失败: ' + e.message);
+        }
+      };
+    } catch (err) {
+      mainPanel.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载 Webhook 配置失败: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  // --------------------------- Global Search Modal (Ctrl+K) ------------------
+
+  function setupGlobalSearch() {
+    const searchBtn = $('#topbar-search-btn');
+    if (searchBtn) {
+      searchBtn.onclick = () => openGlobalSearchModal();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openGlobalSearchModal();
+      }
+    });
+  }
+
+  function openGlobalSearchModal() {
+    const modalHtml = `
+      <div class="global-search-modal" style="display:flex;flex-direction:column;max-height:80vh;">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);">
+          <span style="font-size:18px;">🔍</span>
+          <input type="text" id="gs-input" placeholder="全局检索笔记标题、路径或正文内容… (支持实时匹配)" autofocus style="flex:1;border:none;background:transparent;font-size:15px;outline:none;margin:0;" />
+          <span style="font-size:11px;color:var(--muted);background:var(--panel-2);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">ESC 退出</span>
+        </div>
+        <div id="gs-results" style="flex:1;overflow-y:auto;max-height:480px;padding:8px 12px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:12.5px;color:var(--muted);text-align:center;padding:28px 0;">输入关键词开始在所有 Vault 中极速检索…</div>
+        </div>
+      </div>
+    `;
+
+    openModal(modalHtml, (container) => {
+      const input = container.querySelector('#gs-input');
+      const resultsContainer = container.querySelector('#gs-results');
+      input.focus();
+
+      let debounceTimer = null;
+      input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+          const query = input.value.trim().toLowerCase();
+          if (!query) {
+            resultsContainer.innerHTML = '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:28px 0;">输入关键词开始在所有 Vault 中极速检索…</div>';
+            return;
+          }
+
+          resultsContainer.innerHTML = '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:16px 0;">检索中…</div>';
+
+          try {
+            // Search across manifests and files in all user's accessible vaults
+            const matches = [];
+            for (const v of state.vaults) {
+              const res = await api(`/api/vaults/${v.id}/files`);
+              const data = await res.json();
+              const manifest = data.manifest || {};
+
+              for (const [filePath, info] of Object.entries(manifest)) {
+                if (filePath.toLowerCase().includes(query)) {
+                  matches.push({
+                    vaultId: v.id,
+                    vaultName: v.name,
+                    path: filePath,
+                    size: info.size,
+                    mtime: info.mtime,
+                  });
+                }
+              }
+            }
+
+            if (matches.length === 0) {
+              resultsContainer.innerHTML = `<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:28px 0;">未找到包含 "${escapeHtml(query)}" 的笔记</div>`;
+              return;
+            }
+
+            resultsContainer.innerHTML = '';
+            for (const m of matches.slice(0, 50)) {
+              const item = document.createElement('div');
+              item.className = 'global-search-item';
+              item.style.cssText = 'padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:all 0.15s;';
+              
+              const highlightedPath = escapeHtml(m.path).replace(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark style="background:rgba(255,200,0,0.3);color:inherit;padding:0 2px;border-radius:2px;">$1</mark>');
+
+              item.innerHTML = `
+                <div style="overflow:hidden;flex:1;">
+                  <div style="font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+                    <span>📄</span>
+                    <span>${highlightedPath}</span>
+                  </div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+                    Vault: <b>${escapeHtml(m.vaultName)}</b> · 大小: ${formatBytes(m.size)} · 修改于: ${new Date(m.mtime).toLocaleDateString()}
+                  </div>
+                </div>
+                <button class="secondary" style="font-size:11.5px;padding:3px 8px;flex-shrink:0;">打开编辑 →</button>
+              `;
+
+              item.onclick = async () => {
+                closeModal();
+                await openVault(m.vaultId, 'files');
+                await openFile(m.vaultId, m.path);
+              };
+
+              item.onmouseenter = () => { item.style.borderColor = 'var(--primary)'; item.style.background = 'var(--panel)'; };
+              item.onmouseleave = () => { item.style.borderColor = 'var(--border)'; item.style.background = 'var(--bg)'; };
+
+              resultsContainer.appendChild(item);
+            }
+          } catch (e) {
+            resultsContainer.innerHTML = `<div style="color:#e74c3c;font-size:12.5px;text-align:center;padding:16px 0;">检索失败: ${escapeHtml(e.message)}</div>`;
+          }
+        }, 180);
+      });
+    });
+  }
+
   // --------------------------- Settings Panel (Fast Note Sync) -----------------------------
 
   let currentSettingsSubTab = 'plugin';
@@ -2747,8 +3713,8 @@
       // 1. Nimbus Plugin configuration tab
       const vaultOptions = state.vaults.map((v) => `<option value="${v.id}" ${v.id === currentVault.id ? 'selected' : ''}>${escapeHtml(v.name)} (${v.id})</option>`).join('');
       const tokenOptions = [
-        `<option value="${state.token}">当前登录主令牌 (${state.user?.username})</option>`,
-        ...tokensList.map((t) => `<option value="${t.id}">[专属设备] ${escapeHtml(t.label)} (${t.maskedToken})</option>`),
+        `<option value="${state.token}">🔑 当前登录主令牌 (${state.user?.username || 'Main'})</option>`,
+        ...tokensList.map((t) => `<option value="${escapeHtml(t.token || '')}">📱 [专属设备] ${escapeHtml(t.label)} (${escapeHtml(t.maskedToken || '')})</option>`),
       ].join('');
 
       container.innerHTML = `
@@ -2818,7 +3784,7 @@
         const selectedVaultId = $('#plugin-vault-select').value;
         const serverUrl = ($('#plugin-server-url').value.trim() || serverOrigin).replace(/\/+$/, '');
         const deviceName = $('#plugin-device-name').value.trim() || 'Obsidian-Client';
-        const rawToken = $('#plugin-token-select').value;
+        const rawToken = $('#plugin-token-select').value || state.token;
         const wsUrl = serverUrl.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://') + '/ws';
 
         const configObj = {
@@ -3453,47 +4419,64 @@
       });
     } else if (subTab === 'tokens') {
       // 4. Device Tokens management tab
-      const tokenRows = tokensList.length === 0
-        ? `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">暂无专属设备令牌，您可点击下方创建</td></tr>`
-        : tokensList.map((t) => `
-            <tr>
+      function renderTokenTableBody() {
+        if (!tokensList || tokensList.length === 0) {
+          return `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">暂无专属设备令牌，您可点击下方创建</td></tr>`;
+        }
+        return tokensList.map((t) => {
+          const displayMasked = t.maskedToken || (t.token ? `${t.token.slice(0, 10)}...${t.token.slice(-6)}` : '******');
+          return `
+            <tr id="token-row-${t.id}">
               <td><b>${escapeHtml(t.label || '设备')}</b></td>
-              <td><code>${escapeHtml(t.maskedToken)}</code></td>
-              <td style="color:var(--muted);font-size:12px;">${new Date(t.createdAt).toLocaleString()}</td>
-              <td style="color:var(--muted);font-size:12px;">${t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : '从未使用'}</td>
               <td>
-                <button class="btn-sm ghost token-del-btn" data-tokenid="${t.id}" title="注销设备令牌" style="color:var(--danger)">注销</button>
+                <div class="token-val-box">
+                  <code id="token-display-${t.id}">${escapeHtml(displayMasked)}</code>
+                  <button class="token-act-btn token-toggle-btn" data-tokenid="${t.id}" data-state="masked" title="查看 / 隐藏完整令牌">👁️ 查看</button>
+                  <button class="token-act-btn primary token-copy-btn" data-token="${escapeHtml(t.token || '')}" title="复制完整令牌">📋 复制</button>
+                </div>
+              </td>
+              <td style="color:var(--muted);font-size:12px;">${new Date(t.createdAt).toLocaleString()}</td>
+              <td style="color:var(--muted);font-size:12px;">${t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : '<span style="color:var(--muted)">从未使用</span>'}</td>
+              <td>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <button class="btn-sm secondary token-cfg-btn" data-tokenid="${t.id}" title="查看并复制对应 Obsidian 插件配置">⚡ 配置</button>
+                  <button class="btn-sm ghost token-del-btn" data-tokenid="${t.id}" title="注销设备令牌" style="color:var(--danger)">注销</button>
+                </div>
               </td>
             </tr>
-          `).join('');
+          `;
+        }).join('');
+      }
 
       container.innerHTML = `
         <div class="settings-card">
           <div class="settings-card-header">
             <h3><span>🔑</span> 多端专属设备令牌 (Device Access Tokens)</h3>
-            <p>为每台设备（如 MacBook、iPhone、Windows 办公电脑）签发独立 Token，各端独立鉴权，便于安全管理</p>
+            <p>为每台设备（如 MacBook、iPhone、Windows 办公电脑）签发独立 Token，支持随时查看、复制与注销，各端独立鉴权便于安全管理</p>
           </div>
 
           <div class="token-table-wrap" style="margin-bottom:20px;">
             <table class="token-table">
               <thead>
                 <tr>
-                  <th>设备名称 / 备注</th>
-                  <th>令牌预览</th>
-                  <th>创建时间</th>
-                  <th>最近活跃</th>
-                  <th>操作</th>
+                  <th style="width:160px;">设备名称 / 备注</th>
+                  <th>访问令牌 (Token)</th>
+                  <th style="width:160px;">创建时间</th>
+                  <th style="width:160px;">最近活跃</th>
+                  <th style="width:130px;">操作</th>
                 </tr>
               </thead>
-              <tbody>
-                ${tokenRows}
+              <tbody id="tokens-table-tbody">
+                ${renderTokenTableBody()}
               </tbody>
             </table>
           </div>
 
+          <div id="new-token-display-box" style="margin-bottom:20px;"></div>
+
           <div class="settings-card-header" style="margin-top:24px;">
             <h3><span>➕</span> 新建专属设备 Token</h3>
-            <p>创建后请妥善复制保存，可直接在 Obsidian 客户端粘贴作为同步鉴权密钥</p>
+            <p>创建后系统将自动保存并支持随时查看或复制，可直接用于 Obsidian 同步插件鉴权</p>
           </div>
 
           <div class="settings-form-grid" style="align-items:flex-end;">
@@ -3516,28 +4499,128 @@
               <button id="create-token-btn" class="btn-primary">＋ 生成设备 Token</button>
             </div>
           </div>
-
-          <div id="new-token-display-box" style="margin-top:16px;"></div>
         </div>
       `;
 
-      // Bind delete token buttons
-      container.querySelectorAll('.token-del-btn').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const tid = btn.dataset.tokenid;
-          if (!confirm('确定要注销并废除该设备令牌吗？该设备将无法继续同步。')) return;
-          try {
-            const res = await api(`/api/settings/tokens/${tid}`, { method: 'DELETE' });
-            const body = await res.json();
-            if (body.ok) {
-              toast('设备令牌已注销');
-              renderSettingsPanel('tokens');
+      function bindTokenRowEvents() {
+        // 1. Toggle reveal / hide token
+        container.querySelectorAll('.token-toggle-btn').forEach((btn) => {
+          btn.onclick = () => {
+            const tid = btn.dataset.tokenid;
+            const targetToken = tokensList.find((t) => t.id === tid);
+            const codeEl = container.querySelector(`#token-display-${tid}`);
+            if (!targetToken || !codeEl) return;
+
+            const isMasked = btn.dataset.state === 'masked';
+            if (isMasked) {
+              codeEl.textContent = targetToken.token || targetToken.maskedToken;
+              codeEl.style.color = '#3fb950';
+              btn.dataset.state = 'revealed';
+              btn.textContent = '🙈 隐藏';
+            } else {
+              codeEl.textContent = targetToken.maskedToken || `${(targetToken.token || '').slice(0, 10)}...${(targetToken.token || '').slice(-6)}`;
+              codeEl.style.color = 'var(--accent)';
+              btn.dataset.state = 'masked';
+              btn.textContent = '👁️ 查看';
             }
-          } catch (e) {
-            toast(`注销失败: ${e.message}`);
-          }
+          };
         });
-      });
+
+        // 2. Copy token
+        container.querySelectorAll('.token-copy-btn').forEach((btn) => {
+          btn.onclick = () => {
+            const token = btn.dataset.token;
+            if (!token) {
+              toast('Token 内容为空');
+              return;
+            }
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(token).then(() => toast('✓ 设备 Token 已复制到剪贴板！'));
+            } else {
+              prompt('复制设备 Token：', token);
+            }
+          };
+        });
+
+        // 3. Quick Obsidian config export
+        container.querySelectorAll('.token-cfg-btn').forEach((btn) => {
+          btn.onclick = () => {
+            const tid = btn.dataset.tokenid;
+            const targetToken = tokensList.find((t) => t.id === tid);
+            if (!targetToken) return;
+
+            const serverUrl = serverOrigin.replace(/\/+$/, '');
+            const wsUrl = serverUrl.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://') + '/ws';
+            const devName = targetToken.label || 'Obsidian-Device';
+            const cfg = {
+              serverUrl,
+              wsUrl: `${wsUrl}?vaultId=${currentVault.id}&token=${targetToken.token || ''}&deviceId=${encodeURIComponent(devName)}`,
+              vaultId: currentVault.id,
+              authToken: targetToken.token || '',
+              deviceName: devName,
+              autoSyncOnStartup: true,
+            };
+
+            const modalHtml = `
+              <div class="modal-header">
+                <h3>📱 设备「${escapeHtml(targetToken.label)}」Obsidian 配置</h3>
+                <button class="modal-close ghost">✕</button>
+              </div>
+              <div class="modal-body">
+                <p style="color:var(--text-secondary);margin-bottom:12px;">
+                  以下是为设备 <b>${escapeHtml(targetToken.label)}</b> 生成的独立专属同步配置：
+                </p>
+                <div class="nav-section-title">配置文件 <code>data.json</code></div>
+                <pre class="code-snippet" style="max-height:220px;">${escapeHtml(JSON.stringify(cfg, null, 2))}</pre>
+                <p style="color:var(--muted);font-size:12px;margin-top:10px;">
+                  💡 复制后可直接保存至该设备 Obsidian 库目录 <code>.obsidian/plugins/nimbus/data.json</code>。
+                </p>
+              </div>
+              <div class="modal-footer">
+                <button id="modal-copy-device-cfg-btn" class="btn-primary">📋 复制 data.json 配置</button>
+                <button class="modal-close secondary">关闭</button>
+              </div>
+            `;
+            showModal(modalHtml, (diag) => {
+              diag.querySelector('#modal-copy-device-cfg-btn').onclick = () => {
+                const text = JSON.stringify(cfg, null, 2);
+                if (navigator.clipboard?.writeText) {
+                  navigator.clipboard.writeText(text).then(() => toast('配置已复制到剪贴板！'));
+                } else {
+                  prompt('复制配置：', text);
+                }
+              };
+            });
+          };
+        });
+
+        // 4. Revoke token
+        container.querySelectorAll('.token-del-btn').forEach((btn) => {
+          btn.onclick = async () => {
+            const tid = btn.dataset.tokenid;
+            const targetToken = tokensList.find((t) => t.id === tid);
+            const label = targetToken?.label || '该设备';
+            if (!confirm(`确定要注销并废除「${label}」的专属令牌吗？注销后该设备将无法继续同步。`)) return;
+            try {
+              const res = await api(`/api/settings/tokens/${tid}`, { method: 'DELETE' });
+              const body = await res.json();
+              if (body.ok) {
+                toast(`设备令牌「${label}」已注销`);
+                tokensList = tokensList.filter((t) => t.id !== tid);
+                const tbody = container.querySelector('#tokens-table-tbody');
+                if (tbody) tbody.innerHTML = renderTokenTableBody();
+                bindTokenRowEvents();
+              } else {
+                toast(`注销失败: ${body.error || '未知错误'}`);
+              }
+            } catch (e) {
+              toast(`注销失败: ${e.message}`);
+            }
+          };
+        });
+      }
+
+      bindTokenRowEvents();
 
       // Bind create token button
       $('#create-token-btn')?.addEventListener('click', async () => {
@@ -3556,24 +4639,47 @@
           });
           const body = await res.json();
           if (body.ok && body.token) {
+            const newToken = body.token;
+            // Prepend new token to the list
+            tokensList = [newToken, ...tokensList.filter((t) => t.id !== newToken.id)];
+
+            // Clear input
+            $('#new-token-label').value = '';
+
+            // Update table
+            const tbody = container.querySelector('#tokens-table-tbody');
+            if (tbody) tbody.innerHTML = renderTokenTableBody();
+            bindTokenRowEvents();
+
+            // Display persistent success banner
             const display = $('#new-token-display-box');
             display.innerHTML = `
-              <div style="background:var(--panel-2);border:1px solid #2ecc71;border-radius:var(--radius);padding:16px;">
-                <div style="color:#2ecc71;font-weight:600;font-size:14px;margin-bottom:6px;">✓ 设备令牌「${escapeHtml(body.token.label)}」创建成功！</div>
-                <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:8px;">请立即复制下方 Token，填入 Obsidian 插件配置：</div>
+              <div style="background:var(--panel-2);border:1px solid #2ecc71;border-radius:var(--radius);padding:16px;position:relative;">
+                <button id="close-token-success-btn" style="position:absolute;top:10px;right:10px;background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;">✕</button>
+                <div style="color:#2ecc71;font-weight:600;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                  <span>✓</span> 设备专属令牌「${escapeHtml(newToken.label)}」创建成功！
+                </div>
+                <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
+                  该令牌已加入上方管理列表，支持随时查看与注销。您可以立即复制下方 Token 填入 Obsidian 插件：
+                </div>
                 <div style="display:flex;gap:8px;align-items:center;">
-                  <input type="text" readonly value="${escapeHtml(body.token.token)}" id="created-token-value" style="font-family:ui-monospace,monospace;font-size:12px;" />
+                  <input type="text" readonly value="${escapeHtml(newToken.token)}" id="created-token-value" style="font-family:ui-monospace,monospace;font-size:12px;background:var(--panel-3);border:1px solid var(--border);" />
                   <button id="copy-created-token-btn" class="btn-primary" style="flex-shrink:0;">📋 复制 Token</button>
                 </div>
               </div>
             `;
+
+            $('#close-token-success-btn')?.addEventListener('click', () => {
+              display.innerHTML = '';
+            });
+
             $('#copy-created-token-btn')?.addEventListener('click', () => {
-              navigator.clipboard.writeText(body.token.token).then(() => {
+              navigator.clipboard.writeText(newToken.token).then(() => {
                 toast('Token 已复制到剪贴板！');
               });
             });
-            // Reload token list
-            setTimeout(() => renderSettingsPanel('tokens'), 4000);
+
+            toast(`✓ 设备令牌「${newToken.label}」创建成功`);
           } else {
             toast(`创建失败: ${body.error || '未知错误'}`);
           }
