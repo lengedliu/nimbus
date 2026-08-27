@@ -33,13 +33,16 @@ body {
 .hidden { display: none !important; }
 
 /* ----------------- Login Screen ----------------- */
-.center-screen {
+.center-screen, .center-box, #login-view {
   min-height: 100vh;
+  width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
   background: radial-gradient(circle at top, #1c2430 0%, #0d1117 100%);
+  box-sizing: border-box;
 }
 .card {
   background: var(--panel);
@@ -47,8 +50,34 @@ body {
   border-radius: var(--radius-lg);
   padding: 36px;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  box-sizing: border-box;
+}
+.login-card .brand {
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.login-card .brand .logo {
+  font-size: 28px;
+}
+.login-card button[type="submit"] {
+  width: 100%;
+  margin-top: 18px;
+  padding: 10px 16px;
+  justify-content: center;
+  font-size: 14px;
+}
+.error-msg, .error {
+  color: var(--danger);
+  font-size: 13px;
+  min-height: 18px;
+  margin: 8px 0;
+  line-height: 1.4;
 }
 .logo-box {
   display: flex;
