@@ -27,7 +27,10 @@ function checkAccess(req, res, requireWrite = false) {
 // GET file content
 router.get('/:vaultId/files/*', (req, res) => {
   if (!checkAccess(req, res, false)) return;
-  const relPath = req.params[0];
+  let relPath = req.params[0] || '';
+  try {
+    relPath = decodeURIComponent(relPath);
+  } catch (e) {}
   const buf = storage.readFile(req.params.vaultId, relPath);
   if (buf === null) return res.status(404).json({ error: 'File not found' });
 
@@ -56,7 +59,10 @@ router.put(
   express.raw({ type: '*/*', limit: '50mb' }),
   (req, res) => {
     if (!checkAccess(req, res, true)) return;
-    const relPath = req.params[0];
+    let relPath = req.params[0] || '';
+    try {
+      relPath = decodeURIComponent(relPath);
+    } catch (e) {}
     const mtime = req.headers['x-mtime'] ? parseInt(req.headers['x-mtime'], 10) : undefined;
     const baseHash = req.headers['x-base-hash'] || undefined;
     const deviceName = req.headers['x-device-name'] || 'REST / Web Client';
@@ -117,7 +123,10 @@ router.put(
 // DELETE file
 router.delete('/:vaultId/files/*', (req, res) => {
   if (!checkAccess(req, res, true)) return;
-  const relPath = req.params[0];
+  let relPath = req.params[0] || '';
+  try {
+    relPath = decodeURIComponent(relPath);
+  } catch (e) {}
   const deviceName = req.headers['x-device-name'] || 'REST / Web Client';
   const ok = storage.deleteFile(req.params.vaultId, relPath);
   req.app.get('fnsHub').broadcastFileDelete(req.params.vaultId, relPath, req.user.id);

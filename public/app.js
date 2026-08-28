@@ -2137,75 +2137,87 @@
       return;
     }
 
-    const res = await api(`/api/vaults/${vaultId}/files/${encodeURIComponentPath(path)}`);
-    const text = await res.text();
-    const baseHash = state.manifest[path]?.hash;
+    try {
+      const res = await api(`/api/vaults/${vaultId}/files/${encodeURIComponentPath(path)}`);
+      const text = await res.text();
+      const baseHash = (state.manifest && state.manifest[path]) ? state.manifest[path].hash : undefined;
 
-    mainPanel.innerHTML = '';
-    const layout = document.createElement('div');
-    layout.className = 'editor-layout';
+      mainPanel.innerHTML = '';
+      const layout = document.createElement('div');
+      layout.className = 'editor-layout';
 
-    const header = document.createElement('div');
-    header.className = 'editor-header';
-    header.innerHTML = `
-      <div class="editor-title">
-        <button class="secondary" id="ed-back-btn">← 返回</button>
-        <span>📄 ${escapeHtml(path)}</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button class="secondary" id="ed-toggle-preview-btn">👁️ 切换双栏预览</button>
-        <button class="secondary" id="ed-share-btn">🔗 分享</button>
-        <button class="secondary" id="ed-history-btn">⏱️ 历史版本</button>
-        <button class="btn-primary" id="ed-save-btn">💾 保存</button>
-      </div>
-    `;
-    layout.appendChild(header);
+      const header = document.createElement('div');
+      header.className = 'editor-header';
+      header.innerHTML = `
+        <div class="editor-title">
+          <button class="secondary" id="ed-back-btn">← 返回</button>
+          <span>📄 ${escapeHtml(path)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="secondary" id="ed-toggle-preview-btn">👁️ 切换双栏预览</button>
+          <button class="secondary" id="ed-share-btn">🔗 分享</button>
+          <button class="secondary" id="ed-history-btn">⏱️ 历史版本</button>
+          <button class="btn-primary" id="ed-save-btn">💾 保存</button>
+        </div>
+      `;
+      layout.appendChild(header);
 
-    const body = document.createElement('div');
-    body.className = 'editor-body';
+      const body = document.createElement('div');
+      body.className = 'editor-body';
 
-    const editorPane = document.createElement('div');
-    editorPane.className = 'editor-pane';
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.spellcheck = false;
-    editorPane.appendChild(textarea);
+      const editorPane = document.createElement('div');
+      editorPane.className = 'editor-pane';
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.spellcheck = false;
+      editorPane.appendChild(textarea);
 
-    const previewPane = document.createElement('div');
-    previewPane.className = 'preview-pane';
-    previewPane.innerHTML = marked ? marked.parse(text) : `<pre>${escapeHtml(text)}</pre>`;
+      const previewPane = document.createElement('div');
+      previewPane.className = 'preview-pane';
+      const parsedHtml = (typeof marked !== 'undefined' && marked && typeof marked.parse === 'function')
+        ? marked.parse(text)
+        : `<pre style="white-space:pre-wrap;">${escapeHtml(text)}</pre>`;
+      previewPane.innerHTML = parsedHtml;
 
-    body.appendChild(editorPane);
-    body.appendChild(previewPane);
-    layout.appendChild(body);
-    mainPanel.appendChild(layout);
+      body.appendChild(editorPane);
+      body.appendChild(previewPane);
+      layout.appendChild(body);
+      mainPanel.appendChild(layout);
 
-    // Event handlers
-    let showPreview = true;
-    header.querySelector('#ed-toggle-preview-btn').onclick = () => {
-      showPreview = !showPreview;
-      previewPane.classList.toggle('hidden', !showPreview);
-    };
+      // Event handlers
+      let showPreview = true;
+      header.querySelector('#ed-toggle-preview-btn').onclick = () => {
+        showPreview = !showPreview;
+        previewPane.classList.toggle('hidden', !showPreview);
+      };
 
-    textarea.oninput = () => {
-      if (showPreview && marked) {
-        previewPane.innerHTML = marked.parse(textarea.value);
-      }
-    };
+      textarea.oninput = () => {
+        if (showPreview) {
+          if (typeof marked !== 'undefined' && marked && typeof marked.parse === 'function') {
+            previewPane.innerHTML = marked.parse(textarea.value);
+          } else {
+            previewPane.innerHTML = `<pre style="white-space:pre-wrap;">${escapeHtml(textarea.value)}</pre>`;
+          }
+        }
+      };
 
-    header.querySelector('#ed-back-btn').onclick = () => openVault(vaultId, 'files');
-    header.querySelector('#ed-share-btn').onclick = () => showCreateShareModal(vaultId, path);
-    header.querySelector('#ed-history-btn').onclick = () => showHistoryModal(vaultId, path);
+      header.querySelector('#ed-back-btn').onclick = () => openVault(vaultId, 'files');
+      header.querySelector('#ed-share-btn').onclick = () => showCreateShareModal(vaultId, path);
+      header.querySelector('#ed-history-btn').onclick = () => showHistoryModal(vaultId, path);
 
-    header.querySelector('#ed-save-btn').onclick = async () => {
-      try {
-        await saveFile(vaultId, path, textarea.value, baseHash);
-        toast('保存成功并已广播同步');
-        openVault(vaultId, 'files');
-      } catch (e) {
-        toast('保存失败: ' + e.message);
-      }
-    };
+      header.querySelector('#ed-save-btn').onclick = async () => {
+        try {
+          await saveFile(vaultId, path, textarea.value, baseHash);
+          toast('保存成功并已广播同步');
+          openVault(vaultId, 'files');
+        } catch (e) {
+          toast('保存失败: ' + e.message);
+        }
+      };
+    } catch (e) {
+      toast('无法打开笔记内容: ' + e.message);
+      console.error('[Nimbus] Failed to open file:', path, e);
+    }
   }
 
   function renderMediaViewer(vaultId, path, fileUrl) {
