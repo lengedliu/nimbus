@@ -3555,7 +3555,7 @@
         <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);">
           <span style="font-size:20px;">🔍</span>
           <input type="text" id="gs-input" placeholder="输入关键词检索笔记标题、路径或正文内容… (支持实时多库检索)" autofocus style="flex:1;border:none;background:transparent;font-size:15px;outline:none;margin:0;color:var(--text);" />
-          <span style="font-size:11px;color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:4px;border:1px solid var(--border);">ESC 退出</span>
+          <span class="modal-close" style="font-size:11px;color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:4px;border:1px solid var(--border);cursor:pointer;">ESC 退出</span>
         </div>
         <div id="gs-results" style="flex:1;overflow-y:auto;max-height:520px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;">
           <div style="font-size:13px;color:var(--muted);text-align:center;padding:36px 0;">
@@ -3566,7 +3566,7 @@
       </div>
     `;
 
-    openModal(modalHtml, (container) => {
+    showModal(modalHtml, (container) => {
       const input = container.querySelector('#gs-input');
       const resultsContainer = container.querySelector('#gs-results');
       input.focus();

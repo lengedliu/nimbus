@@ -1,5 +1,5 @@
 {
-  "name": "Nimbus",
+  "name": "Nimbus Vault Sync",
   "description": "Obsidian sync and management server with Web dashboard and MCP support",
   "requestFramePermissions": [],
   "majorCapabilities": [
