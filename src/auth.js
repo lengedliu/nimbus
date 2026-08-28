@@ -20,6 +20,10 @@ function requireAuth(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   const payload = token && verifyToken(token);
   if (!payload) return res.status(401).json({ error: 'Unauthorized' });
+  const devicesStore = require('./devices');
+  if (token && devicesStore.isTokenRevoked(token)) {
+    return res.status(401).json({ error: '此设备令牌已被注销废除' });
+  }
   const user = users.findById(payload.sub);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   req.user = { id: user.id, username: user.username, role: user.role || 'user' };

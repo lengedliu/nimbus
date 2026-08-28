@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "运行 Nimbus 服务端",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/server.js",
+      "env": {
+        "PORT": "3000",
+        "JWT_SECRET": "your_local_dev_secret_12345"
+      }
+    }
+  ]
+}

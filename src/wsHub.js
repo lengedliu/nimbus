@@ -46,6 +46,12 @@ class FnsHub {
         return;
       }
       const payload = query.token && verifyToken(query.token);
+      const devicesStore = require('./devices');
+      if (query.token && devicesStore.isTokenRevoked(query.token)) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
+      }
       const user = payload && users.findById(payload.sub);
       const vaultId = query.vaultId;
       const vault = vaultId && vaults.getById(vaultId);
@@ -58,9 +64,11 @@ class FnsHub {
       }
 
       const permission = vaults.getUserPermission(user.id, vaultId, isAdmin);
+      const deviceId = payload?.deviceId || payload?.tid || query.deviceId || 'device-' + user.id.slice(0, 6);
+      const deviceName = payload?.deviceName || payload?.label || query.deviceName || 'Obsidian Client';
 
       this.wss.handleUpgrade(req, socket, head, (ws) => {
-        this._onConnection(ws, user, vaultId, query.deviceId || query.deviceName || 'Obsidian Client', permission);
+        this._onConnection(ws, user, vaultId, { deviceId, deviceName }, permission);
       });
     });
   }
@@ -96,9 +104,16 @@ class FnsHub {
     }));
   }
 
-  _onConnection(ws, user, vaultId, deviceName, permission = 'read-write') {
-    const client = { ws, userId: user.id, username: user.username, deviceName, permission, connectedAt: Date.now() };
+  _onConnection(ws, user, vaultId, deviceMeta, permission = 'read-write') {
+    const deviceId = typeof deviceMeta === 'object' && deviceMeta ? deviceMeta.deviceId : 'device-' + user.id.slice(0, 6);
+    const deviceName = typeof deviceMeta === 'object' && deviceMeta ? deviceMeta.deviceName : (deviceMeta || 'Obsidian Client');
+    const client = { ws, userId: user.id, username: user.username, deviceId, deviceName, permission, connectedAt: Date.now() };
     this._room(vaultId).add(client);
+
+    try {
+      const devicesStore = require('./devices');
+      devicesStore.recordActivity(deviceId, { deviceName });
+    } catch {}
 
     this._send(ws, { type: 'init', manifest: storage.getManifest(vaultId), permission });
 

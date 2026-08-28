@@ -56,13 +56,14 @@ function listAll() {
     .sort((a, b) => (b.lastActiveAt || b.createdAt) - (a.lastActiveAt || a.createdAt));
 }
 
-function generateDeviceToken(user, deviceName = 'Obsidian Client', platform = 'desktop') {
+function generateDeviceToken(user, deviceName = 'Obsidian Client', platform = 'desktop', expiresInDays = 365) {
   const id = crypto.randomBytes(8).toString('hex');
-  // Long-lived token for dedicated device sync (1 year)
+  const durationDays = Number(expiresInDays) > 0 ? Number(expiresInDays) : 365;
+  // Long-lived token for dedicated device sync
   const token = jwt.sign(
-    { sub: user.id, username: user.username, deviceId: id, deviceName, type: 'device' },
+    { sub: user.id, username: user.username, deviceId: id, deviceName: (deviceName || 'Obsidian Device').trim(), type: 'device' },
     JWT_SECRET,
-    { expiresIn: '365d' }
+    { expiresIn: durationDays > 0 ? `${durationDays}d` : '3650d' }
   );
 
   const now = Date.now();

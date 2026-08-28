@@ -97,14 +97,15 @@ router.get('/', (req, res) => {
 
 // POST /api/devices - Generate a dedicated device token
 router.post('/', (req, res) => {
-  const name = req.body.name || req.body.deviceName;
+  const name = req.body.name || req.body.deviceName || req.body.label;
   const platform = req.body.platform || detectPlatform(req.headers['user-agent'] || '');
+  const expiresInDays = req.body.expiresInDays ? parseInt(req.body.expiresInDays, 10) : 365;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: '请输入设备名称 (例如: iPhone 15 Pro, MacBook M3)' });
   }
 
-  const record = devicesStore.generateDeviceToken(req.user, name.trim(), platform);
+  const record = devicesStore.generateDeviceToken(req.user, name.trim(), platform, expiresInDays);
   const clientIp = getClientIp(req);
   devicesStore.recordActivity(record.id, { clientIp, userAgent: req.headers['user-agent'] || '', deviceName: record.deviceName });
 
@@ -115,6 +116,7 @@ router.post('/', (req, res) => {
       name: record.deviceName,
       deviceId: record.id,
       lastIp: clientIp,
+      token: record.token,
       tokenPreview: `${record.token.slice(0, 10)}...${record.token.slice(-6)}`,
       isOnline: false,
     },

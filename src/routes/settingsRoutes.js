@@ -172,7 +172,16 @@ router.post('/database/switch', async (req, res) => {
 // --------------------------- Device / API Tokens ---------------------------
 
 router.get('/tokens', (req, res) => {
-  const tokens = settingsManager.listTokensForUser(req.user.id);
+  const devicesStore = require('../devices');
+  const devs = devicesStore.listForUser(req.user.id);
+  const tokens = devs.map((d) => ({
+    id: d.id,
+    label: d.deviceName || d.label || 'Obsidian Client',
+    token: d.token,
+    createdAt: d.createdAt,
+    lastUsedAt: d.lastActiveAt,
+    maskedToken: d.token ? `${d.token.slice(0, 10)}...${d.token.slice(-6)}` : '',
+  }));
   res.json({ tokens });
 });
 
@@ -182,18 +191,29 @@ router.post('/tokens', (req, res) => {
     return res.status(400).json({ error: '请输入设备或令牌名称' });
   }
 
-  const tokenEntry = settingsManager.createTokenForUser(
-    req.user.id,
-    req.user.username,
+  const devicesStore = require('../devices');
+  const record = devicesStore.generateDeviceToken(
+    req.user,
     label.trim(),
+    'desktop',
     expiresInDays ? parseInt(expiresInDays, 10) : 365
   );
 
-  res.json({ ok: true, token: tokenEntry, message: '设备令牌创建成功' });
+  res.json({
+    ok: true,
+    token: {
+      id: record.id,
+      label: record.deviceName,
+      token: record.token,
+      createdAt: record.createdAt,
+    },
+    message: '设备令牌创建成功',
+  });
 });
 
 router.delete('/tokens/:tokenId', (req, res) => {
-  const ok = settingsManager.revokeToken(req.params.tokenId, req.user.id);
+  const devicesStore = require('../devices');
+  const ok = devicesStore.revokeDevice(req.params.tokenId, req.user.id, req.user.role === 'admin');
   res.json({ ok });
 });
 

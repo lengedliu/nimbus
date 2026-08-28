@@ -380,7 +380,7 @@
 
   // ------------------------- Obsidian Connect Modal ---------------------------
 
-  async function showObsidianConnectModal(vault) {
+  async function showObsidianConnectModal(vault, initialToken, initialDeviceName) {
     const serverUrl = state.serverBase.replace(/\/$/, '');
     const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws';
     const vaultId = vault ? vault.id : (state.vaults[0]?.id || 'YOUR_VAULT_ID');
@@ -389,16 +389,34 @@
     // Fetch device tokens for the user
     let userTokens = [];
     try {
-      const res = await api('/api/settings/tokens');
+      const res = await api('/api/devices');
       if (res.ok) {
         const body = await res.json();
-        userTokens = body.tokens || [];
+        userTokens = (body.devices || []).map((d) => ({
+          id: d.id,
+          label: d.deviceName || d.name || 'Obsidian Client',
+          token: d.token,
+          maskedToken: d.tokenPreview || (d.token ? `${d.token.slice(0, 10)}...${d.token.slice(-6)}` : ''),
+        }));
       }
     } catch {}
 
+    if (userTokens.length === 0) {
+      try {
+        const res2 = await api('/api/settings/tokens');
+        if (res2.ok) {
+          const body2 = await res2.json();
+          userTokens = body2.tokens || [];
+        }
+      } catch {}
+    }
+
+    let currentToken = initialToken || state.token;
+    let currentDevice = initialDeviceName || (state.user?.username ? `${state.user.username}-Obsidian` : 'Client-Obsidian');
+
     const tokenOptions = [
-      `<option value="${state.token}">🔑 当前主登录令牌 (${state.user?.username || 'Main User'})</option>`,
-      ...userTokens.map((t) => `<option value="${escapeHtml(t.token || state.token)}">📱 [专属设备] ${escapeHtml(t.label)} (${escapeHtml(t.maskedToken || '')})</option>`),
+      `<option value="${state.token}" ${currentToken === state.token ? 'selected' : ''}>🔑 当前主登录令牌 (${state.user?.username || 'Main User'})</option>`,
+      ...userTokens.map((t) => `<option value="${escapeHtml(t.token || state.token)}" ${currentToken === t.token ? 'selected' : ''}>📱 [专属设备] ${escapeHtml(t.label)} (${escapeHtml(t.maskedToken || '')})</option>`),
     ].join('');
 
     function buildConfig(selectedToken, deviceName) {
@@ -413,8 +431,6 @@
       };
     }
 
-    let currentToken = state.token;
-    let currentDevice = `${state.user?.username || 'Client'}-Obsidian`;
     let pluginConfig = buildConfig(currentToken, currentDevice);
 
     const html = `
@@ -3186,7 +3202,7 @@
           <div class="empty-state" style="grid-column: 1 / -1; padding: 48px 16px;">
             <div style="font-size:40px;margin-bottom:10px;">📱</div>
             <div style="font-weight:600;font-size:15px;color:var(--text);margin-bottom:4px;">暂无登记的客户端设备</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">点击下方按钮为您的终端快速生成连接令牌</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">点击下方按钮为您的终端快速生成连接令牌与同步配置</div>
             <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
               <button class="secondary quick-seed-btn" data-name="MacBook Pro" data-plat="macos">🍏 添加 Mac 设备</button>
               <button class="secondary quick-seed-btn" data-name="Windows 台式机" data-plat="windows">🪟 添加 Windows 设备</button>
@@ -3199,13 +3215,17 @@
         grid.querySelectorAll('.quick-seed-btn').forEach((b) => {
           b.onclick = async () => {
             try {
-              await api('/api/devices', {
+              const res = await api('/api/devices', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: b.dataset.name, platform: b.dataset.plat }),
               });
+              const body = await res.json();
               toast(`已快速添加 ${b.dataset.name}`);
               renderDevicesPanel();
+              if (body.device) {
+                showDeviceTokenCreatedModal(body.device);
+              }
             } catch (e) {
               toast('添加失败: ' + e.message);
             }
@@ -3267,16 +3287,19 @@
         card.querySelector('.copy-token-btn')?.addEventListener('click', () => {
           const t = dev.token || state.token;
           if (t) {
-            navigator.clipboard.writeText(t);
-            toast('设备专属 Token 已复制到剪贴板！');
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(t).then(() => toast('✓ 设备专属 Token 已复制到剪贴板！'));
+            } else {
+              prompt('复制设备 Token：', t);
+            }
           } else {
             toast('当前设备未记录原始明文');
           }
         });
 
         card.querySelector('.get-config-btn')?.addEventListener('click', () => {
-          const currentVault = state.vaults[0];
-          showObsidianConnectModal(currentVault);
+          const currentVault = state.vaults.find((v) => v.id === state.activeVaultId) || state.vaults[0];
+          showObsidianConnectModal(currentVault, dev.token, devName);
         });
 
         card.querySelector('.revoke-dev-btn')?.addEventListener('click', async () => {
@@ -3297,6 +3320,111 @@
     }
   }
 
+  function showDeviceTokenCreatedModal(device, vault) {
+    const currentVault = vault || state.vaults.find((v) => v.id === state.activeVaultId) || state.vaults[0];
+    const serverUrl = state.serverBase.replace(/\/$/, '');
+    const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws';
+    const vaultId = currentVault ? currentVault.id : 'YOUR_VAULT_ID';
+    const vaultName = currentVault ? currentVault.name : 'Vault';
+    const deviceName = device.deviceName || device.name || 'Obsidian Device';
+    const token = device.token || state.token;
+
+    const pluginConfig = {
+      serverUrl,
+      wsUrl: `${wsUrl}?vaultId=${vaultId}&token=${token}&deviceId=${encodeURIComponent(deviceName)}`,
+      vaultId,
+      vaultName,
+      authToken: token,
+      deviceName,
+      autoSyncOnStartup: true,
+    };
+
+    const platform = (device.platform || '').toLowerCase();
+    const platformIcon = platform.includes('ios') ? '🍎' : platform.includes('android') ? '🤖' : platform.includes('win') ? '🪟' : platform.includes('mac') ? '🍏' : platform.includes('linux') ? '🐧' : '💻';
+
+    const html = `
+      <div class="modal-header">
+        <h3 style="display:flex;align-items:center;gap:8px;">
+          <span>🎉</span>
+          <span>设备「${escapeHtml(deviceName)}」令牌生成成功</span>
+        </h3>
+        <button class="modal-close ghost">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:24px;">${platformIcon}</span>
+          <div>
+            <div style="font-weight:600;font-size:14px;color:var(--text)">
+              已成功为 <b>${escapeHtml(deviceName)}</b> 签发专属独立访问令牌！
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+              设备 ID: <code>${escapeHtml(device.id || device.deviceId)}</code> · 平台: <b>${escapeHtml(device.platform || '通用')}</b>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;">
+          <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;color:var(--text);">🔑 专属访问令牌 (Auth Token)</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="password" id="dev-modal-token-input" readonly value="${escapeHtml(token)}" style="margin:0;padding:6px 10px;font-size:12px;font-family:ui-monospace,monospace;flex:1;background:var(--bg);" />
+            <button id="dev-modal-token-toggle-btn" class="token-act-btn secondary" style="padding:6px 10px;font-size:12px;">👁️ 查看</button>
+            <button id="dev-modal-token-copy-btn" class="btn-primary" style="padding:6px 12px;font-size:12px;">📋 复制 Token</button>
+          </div>
+        </div>
+
+        <div class="nav-section-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span>⚡ Obsidian 插件一键配置文件 (<code>data.json</code>)</span>
+          <span style="font-size:11.5px;color:var(--muted)">直接复制覆盖至 <code>.obsidian/plugins/nimbus/data.json</code></span>
+        </div>
+        <pre id="dev-modal-json-snippet" class="code-snippet" style="max-height:180px;font-size:12px;">${escapeHtml(JSON.stringify(pluginConfig, null, 2))}</pre>
+
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-top:14px;font-size:12px;color:var(--muted);line-height:1.6;">
+          <b>📱 移动端与客户端配置提示：</b><br/>
+          • <b>桌面端</b>：复制上方 JSON 配置文件，保存至对应笔记库的 <code>.obsidian/plugins/nimbus/data.json</code> 文件中重启插件即可。<br/>
+          • <b>手机/平板 (iOS / Android)</b>：在 Obsidian 设置中的 Nimbus 插件界面填入 <b>Server URL</b> (<code>${escapeHtml(serverUrl)}</code>)、<b>Vault ID</b> (<code>${escapeHtml(vaultId)}</code>) 与上方 <b>Token</b>。
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
+        <button id="dev-modal-copy-all-btn" class="btn-primary">📋 一键复制完整 data.json 配置</button>
+        <button class="modal-close secondary">完成</button>
+      </div>
+    `;
+
+    showModal(html, (dialog) => {
+      const tokenInput = dialog.querySelector('#dev-modal-token-input');
+      const toggleBtn = dialog.querySelector('#dev-modal-token-toggle-btn');
+      const copyTokenBtn = dialog.querySelector('#dev-modal-token-copy-btn');
+      const copyAllBtn = dialog.querySelector('#dev-modal-copy-all-btn');
+
+      toggleBtn.onclick = () => {
+        if (tokenInput.type === 'password') {
+          tokenInput.type = 'text';
+          toggleBtn.textContent = '🙈 隐藏';
+        } else {
+          tokenInput.type = 'password';
+          toggleBtn.textContent = '👁️ 查看';
+        }
+      };
+
+      copyTokenBtn.onclick = () => {
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(token).then(() => toast('✓ 专属 Token 已复制到剪贴板！'));
+        } else {
+          prompt('复制 Token：', token);
+        }
+      };
+
+      copyAllBtn.onclick = () => {
+        const text = JSON.stringify(pluginConfig, null, 2);
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text).then(() => toast('✓ data.json 连接配置已复制到剪贴板！'));
+        } else {
+          prompt('复制以下配置：', text);
+        }
+      };
+    });
+  }
+
   function openCreateDeviceModal() {
     const modalHtml = `
       <div class="modal-header">
@@ -3314,21 +3442,32 @@
           <button class="secondary preset-btn" data-name="Windows 台式机" data-plat="windows" style="padding:2px 8px;font-size:11.5px;">🪟 Windows PC</button>
           <button class="secondary preset-btn" data-name="iPhone 15" data-plat="ios" style="padding:2px 8px;font-size:11.5px;">🍎 iPhone</button>
           <button class="secondary preset-btn" data-name="Android 手机" data-plat="android" style="padding:2px 8px;font-size:11.5px;">🤖 Android</button>
+          <button class="secondary preset-btn" data-name="Linux 工作站" data-plat="linux" style="padding:2px 8px;font-size:11.5px;">🐧 Linux</button>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:12px;">
-          <label>设备名称 (例如: MacBook Pro M3, 办公台式机, iPhone 15)
+          <label>设备名称 / 备注 (例如: MacBook Pro M3, 办公台式机, iPhone 15)
             <input type="text" id="nd-name" placeholder="请输入设备名称" />
           </label>
-          <label>终端平台类型
-            <select id="nd-platform">
-              <option value="macos">🍏 macOS</option>
-              <option value="windows">🪟 Windows</option>
-              <option value="linux">🐧 Linux</option>
-              <option value="ios">🍎 iOS (iPhone / iPad)</option>
-              <option value="android">🤖 Android</option>
-            </select>
-          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label>终端平台类型
+              <select id="nd-platform">
+                <option value="macos">🍏 macOS</option>
+                <option value="windows">🪟 Windows</option>
+                <option value="linux">🐧 Linux</option>
+                <option value="ios">🍎 iOS (iPhone / iPad)</option>
+                <option value="android">🤖 Android</option>
+              </select>
+            </label>
+            <label>令牌有效期
+              <select id="nd-expiry">
+                <option value="365" selected>1 年 (推荐)</option>
+                <option value="3650">永久有效 (10 年)</option>
+                <option value="90">90 天</option>
+                <option value="30">30 天</option>
+              </select>
+            </label>
+          </div>
         </div>
       </div>
       <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
@@ -3337,7 +3476,7 @@
       </div>
     `;
 
-    openModal(modalHtml, (container) => {
+    showModal(modalHtml, (container) => {
       container.querySelectorAll('.preset-btn').forEach((btn) => {
         btn.onclick = () => {
           container.querySelector('#nd-name').value = btn.dataset.name;
@@ -3348,6 +3487,7 @@
       container.querySelector('#nd-submit-btn').onclick = async () => {
         const name = container.querySelector('#nd-name').value.trim();
         const platform = container.querySelector('#nd-platform').value;
+        const expiresInDays = container.querySelector('#nd-expiry')?.value || '365';
         if (!name) {
           toast('请输入设备名称');
           return;
@@ -3357,12 +3497,15 @@
           const res = await api('/api/devices', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, deviceName: name, platform }),
+            body: JSON.stringify({ name, deviceName: name, platform, expiresInDays }),
           });
           const body = await res.json();
           closeModal();
           toast(`设备 "${name}" 令牌生成成功！`);
           renderDevicesPanel();
+          if (body.device) {
+            showDeviceTokenCreatedModal(body.device);
+          }
         } catch (e) {
           toast('生成失败: ' + e.message);
         }
