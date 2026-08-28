@@ -1,5 +1,5 @@
 {
-  "serverName": "Nimbus",
+  "serverName": "Nimbus Vault Sync",
   "publicUrl": "",
   "wsHeartbeatInterval": 30,
   "conflictStrategy": "conflict_copy",

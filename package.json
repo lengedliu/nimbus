@@ -1,7 +1,7 @@
 {
-  "name": "nimbus-server",
+  "name": "nimbus-vault-sync",
   "version": "1.1.0",
-  "description": "Nimbus - a lightweight self-hosted sync + management server for Obsidian vaults, with MCP support",
+  "description": "Nimbus Vault Sync - a lightweight self-hosted sync + management server for Obsidian vaults, with MCP support",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

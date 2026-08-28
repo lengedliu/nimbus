@@ -3680,7 +3680,7 @@
     }
 
     const settings = settingsData || {
-      serverName: 'Nimbus',
+      serverName: 'Nimbus Vault Sync',
       publicUrl: '',
       wsHeartbeatInterval: 30,
       conflictStrategy: 'conflict_copy',
@@ -3705,7 +3705,7 @@
           <div>
             <h2 style="margin:0 0 4px;font-size:20px;display:flex;align-items:center;gap:10px;">
               <span>⚙️</span>
-              <span>设置 (Nimbus)</span>
+              <span>设置 (Nimbus Vault Sync)</span>
             </h2>
             <p style="margin:0;font-size:13px;color:var(--muted)">
               配置 Obsidian 客户端同步参数、实时冲突裁决机制、多端专属令牌与数据保留策略

@@ -6,7 +6,7 @@ const JsonDb = require('./jsonDb');
 const dbManager = require('./db');
 
 const DEFAULT_SYSTEM_SETTINGS = {
-  serverName: 'Nimbus',
+  serverName: 'Nimbus Vault Sync',
   publicUrl: '',
   wsHeartbeatInterval: 30, // seconds
   conflictStrategy: 'conflict_copy', // 'conflict_copy' | 'overwrite_latest' | 'server_win'

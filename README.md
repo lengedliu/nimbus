@@ -1,6 +1,6 @@
-# Nimbus Server — self-hosted Obsidian 同步 + 管理 + MCP 服务
+# Nimbus Vault Sync — self-hosted Obsidian 同步 + 管理 + MCP 服务
 
-**Nimbus**（前身 FNS / Fast Note Sync）是一个轻量级、自托管的 Obsidian 服务端：
+**Nimbus Vault Sync**（前身 FNS / Fast Note Sync）是一个轻量级、自托管的 Obsidian 服务端：
 
 - 📡 **实时同步** — WebSocket，多设备/多 vault，带写冲突检测
 - 🖥 **Web 管理后台** — 浏览器里登录、建 vault、看文件、在线编辑/删除，管理员还能管用户
@@ -15,7 +15,7 @@
 ## 目录结构
 
 ```
-nimbus-server/
+nimbus-vault-sync/
 ├── server.js                # 入口：REST API + WebSocket + MCP 端点 + 管理后台静态资源
 ├── obsidian-plugin/         # 配套 Obsidian 双向同步插件 (可直接复制到 .obsidian/plugins/nimbus-sync)
 │   ├── manifest.json
@@ -46,7 +46,7 @@ nimbus-server/
 ## 快速开始
 
 ```bash
-cd nimbus-server
+cd nimbus-vault-sync
 npm install
 cp .env.example .env       # 按需修改 PORT / JWT_SECRET
 npm start
@@ -62,7 +62,7 @@ npm start
 ## Docker 部署
 
 ```bash
-cd nimbus-server
+cd nimbus-vault-sync
 cp .env.example .env    # 改好 JWT_SECRET，其他默认值可以先不动
 docker compose up -d --build
 
@@ -75,11 +75,11 @@ docker compose exec nimbus npm run create-user
 - 改端口：改 `.env` 里的 `PORT`（同时也是 compose 里宿主机对外暴露的端口）
 - 只用 `Dockerfile`（不经 compose）也可以：
   ```bash
-  docker build -t nimbus-server .
+  docker build -t nimbus-vault-sync .
   docker run -d -p 8787:8787 \
     -e JWT_SECRET=改成随机字符串 \
     -v $(pwd)/data:/app/data \
-    --name nimbus-server nimbus-server
+    --name nimbus-vault-sync nimbus-vault-sync
   ```
 - 更新代码后重新部署：`docker compose up -d --build`（`./data` 卷不受影响，数据不丢）
 - MCP 端点（`/api/mcp`）就是主服务的一部分，docker 部署自动带上，不需要额外配置
@@ -119,7 +119,7 @@ API：
   - **全部 Vault**：看所有用户名下的全部 vault（名称/所有者/ID/创建时间）
 
 登录时"服务器地址"留空则默认用当前打开这个页面的地址；如果后台部署在别的域名/端口，
-填完整地址（如 `http://192.168.1.10:8787`）即可连过去，方便一个后台管理多台 Nimbus。
+填完整地址（如 `http://192.168.1.10:8787`）即可连过去，方便一个后台管理多台 Nimbus Vault Sync。
 
 ## MCP 支持
 
@@ -144,7 +144,7 @@ AI 客户端（Claude Code、Cursor、Cherry Studio 等）直接拿 URL + Token 
 ```json
 {
   "mcpServers": {
-    "nimbus": {
+    "nimbus-vault-sync": {
       "url": "http://<host>/api/mcp",
       "type": "http",
       "headers": {
@@ -222,11 +222,11 @@ Cursor/Cherry Studio 在各自的 MCP 设置界面里）即可。
 
 ## 和 fast-note-sync-service（FNS）的对比
 
-Nimbus 最初参考了 [haierkeys/fast-note-sync-service](https://github.com/haierkeys/fast-note-sync-service)
+Nimbus Vault Sync 最初参考了 [haierkeys/fast-note-sync-service](https://github.com/haierkeys/fast-note-sync-service)
 （同样自称 FNS，跟这个项目撞名，是两套独立实现，Go 写的，star 1.7k，功能更成熟）。
 对比一下，方便决定要不要迁移/怎么选：
 
-| 功能 | Nimbus | FNS (haierkeys) |
+| 功能 | Nimbus Vault Sync | FNS (haierkeys) |
 |---|---|---|
 | 实时同步（WebSocket） | ✅ | ✅ |
 | Web 管理后台 | ✅ | ✅（还带 OIDC 登录） |
