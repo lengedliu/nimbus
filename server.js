@@ -16,6 +16,7 @@ const shareRoutes = require('./src/routes/shareRoutes');
 const settingsRoutes = require('./src/routes/settingsRoutes');
 const deviceRoutes = require('./src/routes/deviceRoutes');
 const docsRoutes = require('./src/routes/docsRoutes');
+const sponsorRoutes = require('./src/routes/sponsorRoutes');
 const fnsHub = require('./src/wsHub');
 const dbManager = require('./src/db');
 const users = require('./src/users');
@@ -63,6 +64,7 @@ app.use('/api/vaults', vaultExtrasRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mcp', mcpRoutes);
 app.use('/api/docs', docsRoutes);
+app.use('/api/sponsors', sponsorRoutes);
 
 // Public share page
 app.get('/share/:shareId', (req, res) => {
