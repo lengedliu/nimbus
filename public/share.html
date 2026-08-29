@@ -322,24 +322,81 @@
     currentRawContent = data.content || '';
     document.title = `${data.title} · Nimbus Note`;
 
-    const htmlContent = marked ? marked.parse(data.content) : data.content;
+    const isHtml = /\.(html|htm)$/i.test(data.filePath || '');
     const dateStr = new Date(data.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     const expiresStr = data.expiresAt ? ` · 有效期至 ${new Date(data.expiresAt).toLocaleDateString()}` : '';
 
-    container.innerHTML = `
-      <article class="article-card">
-        <div class="note-meta">
-          <h1 class="note-title">${escapeHtml(data.title)}</h1>
-          <div class="meta-tags">
-            <span>📅 ${dateStr}${expiresStr}</span>
-            <span>📄 ${escapeHtml(data.filePath)}</span>
+    if (isHtml) {
+      container.innerHTML = `
+        <article class="article-card" style="padding:20px;max-width:1000px;">
+          <div class="note-meta" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+              <h1 class="note-title" style="margin:0;font-size:20px;">${escapeHtml(data.title)}</h1>
+              <div style="display:flex;gap:8px;">
+                <button id="share-mode-page" style="background:var(--primary);color:#fff;border-color:var(--primary);">🌐 网页视图</button>
+                <button id="share-mode-code">📝 查看源码</button>
+              </div>
+            </div>
+            <div class="meta-tags" style="margin-top:8px;">
+              <span>📅 ${dateStr}${expiresStr}</span>
+              <span>🌐 ${escapeHtml(data.filePath)}</span>
+            </div>
           </div>
-        </div>
-        <div class="markdown-body">
-          ${htmlContent}
-        </div>
-      </article>
-    `;
+          <div id="share-html-view-wrap" style="height:650px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;">
+            <iframe id="share-html-frame" style="width:100%;height:100%;border:none;" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+          </div>
+          <div id="share-code-view-wrap" style="display:none;margin-top:10px;">
+            <pre style="background:var(--code-bg);border:1px solid var(--border);padding:16px;border-radius:8px;overflow-x:auto;font-family:monospace;font-size:13px;white-space:pre-wrap;">${escapeHtml(data.content)}</pre>
+          </div>
+        </article>
+      `;
+
+      const frame = document.getElementById('share-html-frame');
+      if (frame) frame.srcdoc = data.content;
+
+      const pageBtn = document.getElementById('share-mode-page');
+      const codeBtn = document.getElementById('share-mode-code');
+      const htmlWrap = document.getElementById('share-html-view-wrap');
+      const codeWrap = document.getElementById('share-code-view-wrap');
+
+      pageBtn.onclick = () => {
+        pageBtn.style.background = 'var(--primary)';
+        pageBtn.style.color = '#fff';
+        pageBtn.style.borderColor = 'var(--primary)';
+        codeBtn.style.background = 'var(--card)';
+        codeBtn.style.color = 'var(--text)';
+        codeBtn.style.borderColor = 'var(--border)';
+        htmlWrap.style.display = 'block';
+        codeWrap.style.display = 'none';
+      };
+
+      codeBtn.onclick = () => {
+        codeBtn.style.background = 'var(--primary)';
+        codeBtn.style.color = '#fff';
+        codeBtn.style.borderColor = 'var(--primary)';
+        pageBtn.style.background = 'var(--card)';
+        pageBtn.style.color = 'var(--text)';
+        pageBtn.style.borderColor = 'var(--border)';
+        htmlWrap.style.display = 'none';
+        codeWrap.style.display = 'block';
+      };
+    } else {
+      const htmlContent = marked ? marked.parse(data.content) : data.content;
+      container.innerHTML = `
+        <article class="article-card">
+          <div class="note-meta">
+            <h1 class="note-title">${escapeHtml(data.title)}</h1>
+            <div class="meta-tags">
+              <span>📅 ${dateStr}${expiresStr}</span>
+              <span>📄 ${escapeHtml(data.filePath)}</span>
+            </div>
+          </div>
+          <div class="markdown-body">
+            ${htmlContent}
+          </div>
+        </article>
+      `;
+    }
 
     if (data.allowCopy) {
       topActions.style.display = 'flex';

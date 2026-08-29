@@ -697,6 +697,7 @@
         <div class="filter-pills">
           <span class="filter-pill ${state.fileFilter === 'all' ? 'active' : ''}" data-filter="all">全部 (${paths.length})</span>
           <span class="filter-pill ${state.fileFilter === 'md' ? 'active' : ''}" data-filter="md">Markdown</span>
+          <span class="filter-pill ${state.fileFilter === 'html' ? 'active' : ''}" data-filter="html">HTML 网页</span>
           <span class="filter-pill ${state.fileFilter === 'media' ? 'active' : ''}" data-filter="media">媒体/附件</span>
           <span class="filter-pill ${state.fileFilter === 'config' ? 'active' : ''}" data-filter="config">配置 (.obsidian)</span>
         </div>
@@ -822,6 +823,8 @@
     // Filter by type
     if (state.fileFilter === 'md') {
       paths = paths.filter((p) => p.toLowerCase().endsWith('.md'));
+    } else if (state.fileFilter === 'html') {
+      paths = paths.filter((p) => /\.(html|htm)$/i.test(p));
     } else if (state.fileFilter === 'media') {
       paths = paths.filter((p) => /\.(png|jpg|jpeg|gif|webp|svg|pdf|mp3|mp4|mov|wav|zip)$/i.test(p));
     } else if (state.fileFilter === 'config') {
@@ -959,8 +962,10 @@
           const p = item.path;
           const meta = item.meta;
           const isMd = p.toLowerCase().endsWith('.md');
+          const isHtml = /\.(html|htm)$/i.test(p);
           const isImg = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(p);
-          const icon = isMd ? '📄' : isImg ? '🖼️' : p.startsWith('.obsidian/') ? '⚙️' : '📎';
+          const isPdf = /\.pdf$/i.test(p);
+          const icon = isMd ? '📄' : isHtml ? '🌐' : isImg ? '🖼️' : isPdf ? '📕' : p.startsWith('.obsidian/') ? '⚙️' : '📎';
 
           const row = document.createElement('div');
           row.className = 'tree-node-row file-row';
@@ -989,7 +994,7 @@
 
           const actionsCol = row.querySelector('.tree-actions-col');
 
-          if (isMd) {
+          if (isMd || isHtml) {
             const shareBtn = document.createElement('button');
             shareBtn.className = 'secondary';
             shareBtn.textContent = '🔗 分享';
@@ -1051,8 +1056,10 @@
     for (const p of paths) {
       const meta = manifest[p] || { size: 0, mtime: Date.now() };
       const isMd = p.toLowerCase().endsWith('.md');
+      const isHtml = /\.(html|htm)$/i.test(p);
       const isImg = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(p);
-      const icon = isMd ? '📄' : isImg ? '🖼️' : p.startsWith('.obsidian/') ? '⚙️' : '📎';
+      const isPdf = /\.pdf$/i.test(p);
+      const icon = isMd ? '📄' : isHtml ? '🌐' : isImg ? '🖼️' : isPdf ? '📕' : p.startsWith('.obsidian/') ? '⚙️' : '📎';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -1069,7 +1076,7 @@
 
       const actionsCell = tr.querySelector('.actions');
 
-      if (isMd) {
+      if (isMd || isHtml) {
         const shareBtn = document.createElement('button');
         shareBtn.className = 'secondary';
         shareBtn.textContent = '🔗 分享';
@@ -2414,6 +2421,7 @@
 
   async function openFile(vaultId, path) {
     const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(path);
+    const isHtml = /\.(html|htm)$/i.test(path);
     const fileUrl = `${state.serverBase.replace(/\/$/, '')}/api/vaults/${vaultId}/files/${encodeURIComponentPath(path)}`;
 
     if (isImage) {
@@ -2430,6 +2438,123 @@
       const layout = document.createElement('div');
       layout.className = 'editor-layout';
 
+      if (isHtml) {
+        // Dedicated HTML viewer and editor
+        const header = document.createElement('div');
+        header.className = 'editor-header';
+        header.innerHTML = `
+          <div class="editor-title">
+            <button class="secondary" id="ed-back-btn">← 返回</button>
+            <span>🌐 ${escapeHtml(path)}</span>
+            <span class="badge primary" style="font-size:11px;">HTML 网页</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div class="editor-mode-btn-group">
+              <button class="editor-mode-btn active" id="html-mode-page" title="完整渲染网页视图">🌐 网页视图</button>
+              <button class="editor-mode-btn" id="html-mode-split" title="左侧源码、右侧实时渲染">👁️ 实时双栏</button>
+              <button class="editor-mode-btn" id="html-mode-code" title="仅查看与编辑 HTML 源代码">📝 源码编辑</button>
+            </div>
+            <button class="secondary" id="ed-open-tab-btn" title="在新标签页全屏独立打开此网页">🚀 新窗口打开</button>
+            <button class="secondary" id="ed-share-btn">🔗 分享</button>
+            <button class="secondary" id="ed-history-btn">⏱️ 历史版本</button>
+            <button class="btn-primary" id="ed-save-btn">💾 保存</button>
+          </div>
+        `;
+        layout.appendChild(header);
+
+        const body = document.createElement('div');
+        body.className = 'editor-body';
+
+        const editorPane = document.createElement('div');
+        editorPane.className = 'editor-pane';
+        editorPane.style.display = 'none'; // Hidden in default "page" mode
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.spellcheck = false;
+        editorPane.appendChild(textarea);
+
+        const previewPane = document.createElement('div');
+        previewPane.className = 'html-preview-pane full-page';
+
+        const iframe = document.createElement('iframe');
+        iframe.className = 'html-preview-iframe';
+        iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-modals');
+        previewPane.appendChild(iframe);
+
+        body.appendChild(editorPane);
+        body.appendChild(previewPane);
+        layout.appendChild(body);
+        mainPanel.appendChild(layout);
+
+        // Populate iframe content
+        function renderHtmlInIframe(htmlContent) {
+          iframe.srcdoc = htmlContent;
+        }
+        renderHtmlInIframe(text);
+
+        // Mode switcher handler
+        let currentMode = 'page'; // 'page' | 'split' | 'code'
+        function setHtmlViewMode(mode) {
+          currentMode = mode;
+          header.querySelector('#html-mode-page').classList.toggle('active', mode === 'page');
+          header.querySelector('#html-mode-split').classList.toggle('active', mode === 'split');
+          header.querySelector('#html-mode-code').classList.toggle('active', mode === 'code');
+
+          if (mode === 'page') {
+            editorPane.style.display = 'none';
+            previewPane.style.display = 'flex';
+            previewPane.classList.add('full-page');
+          } else if (mode === 'split') {
+            editorPane.style.display = 'flex';
+            previewPane.style.display = 'flex';
+            previewPane.classList.remove('full-page');
+            renderHtmlInIframe(textarea.value);
+          } else if (mode === 'code') {
+            editorPane.style.display = 'flex';
+            previewPane.style.display = 'none';
+          }
+        }
+
+        header.querySelector('#html-mode-page').onclick = () => setHtmlViewMode('page');
+        header.querySelector('#html-mode-split').onclick = () => setHtmlViewMode('split');
+        header.querySelector('#html-mode-code').onclick = () => setHtmlViewMode('code');
+
+        // Real-time live update while typing
+        let liveUpdateTimer;
+        textarea.oninput = () => {
+          if (currentMode === 'split' || currentMode === 'page') {
+            clearTimeout(liveUpdateTimer);
+            liveUpdateTimer = setTimeout(() => {
+              renderHtmlInIframe(textarea.value);
+            }, 200);
+          }
+        };
+
+        // Open in new tab
+        header.querySelector('#ed-open-tab-btn').onclick = () => {
+          const blob = new Blob([textarea.value], { type: 'text/html;charset=utf-8' });
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank');
+        };
+
+        header.querySelector('#ed-back-btn').onclick = () => openVault(vaultId, 'files');
+        header.querySelector('#ed-share-btn').onclick = () => showCreateShareModal(vaultId, path);
+        header.querySelector('#ed-history-btn').onclick = () => showHistoryModal(vaultId, path);
+
+        header.querySelector('#ed-save-btn').onclick = async () => {
+          try {
+            await saveFile(vaultId, path, textarea.value, baseHash);
+            toast('HTML 笔记已保存并已广播同步');
+            openVault(vaultId, 'files');
+          } catch (e) {
+            toast('保存失败: ' + e.message);
+          }
+        };
+        return;
+      }
+
+      // Markdown & General Text file editor
       const header = document.createElement('div');
       header.className = 'editor-header';
       header.innerHTML = `
