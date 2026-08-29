@@ -1,6 +1,6 @@
 {
   "name": "Nimbus Vault Sync",
-  "description": "Obsidian sync and management server with Web dashboard and MCP support",
+  "description": "High-performance Obsidian sync server with Git auto-backup, Web dashboard, full REST API, and 20 MCP tools",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

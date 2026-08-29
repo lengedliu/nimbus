@@ -130,6 +130,18 @@ router.get('/tools', (req, res) => {
       description: '直接通过 AI 为笔记生成公开外链分享地址（支持密码保护与有效期设定）。',
       parameters: { path: '必填笔记路径', title: '可选标题', password: '可选密码', expiresDays: '可选天数', allowCopy: '默认 true', vaultId: '可选' },
     },
+    {
+      name: 'get_vault_git_status',
+      category: 'Git 自动化备份',
+      description: '自省当前笔记库的 Git 版本控制与远端同步状态（当前分支、未提交文件数、未推送提交、最近提交快照及远端仓库地址）。',
+      parameters: { vaultId: '可选笔记库ID' },
+    },
+    {
+      name: 'git_sync_vault',
+      category: 'Git 自动化备份',
+      description: '执行 Git 仓库自动化操作：提交并推送到远端 Git 仓库 (GitHub/Gitee/GitLab)、从远端拉取更新或测试连通性。',
+      parameters: { vaultId: '可选', action: 'commit_and_push | pull | test_connection', commitMessage: '可选自定义提交信息' },
+    },
   ];
 
   res.json({

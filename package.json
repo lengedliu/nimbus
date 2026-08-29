@@ -1,7 +1,12 @@
 {
   "name": "nimbus-vault-sync",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Nimbus Vault Sync - a lightweight self-hosted sync + management server for Obsidian vaults, with MCP support",
+  "homepage": "https://github.com/lengedliu/nimbus-vault-sync",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lengedliu/nimbus-vault-sync.git"
+  },
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const archiver = require('archiver');
 const { vaultFilesRoot, vaultRoot } = require('./vaults');
+const gitSync = require('./gitSync');
 
 /*
  * Layout inside a vault's data folder:
@@ -228,6 +229,10 @@ function restoreFromTrash(vaultId, trashId) {
 
   fs.unlinkSync(trashFull);
   saveIndex(idxPath, entries.filter((e) => e.id !== trashId));
+  invalidateManifestCache(vaultId);
+  try {
+    gitSync.notifyChange(vaultId);
+  } catch {}
   return entry.path;
 }
 
@@ -310,6 +315,9 @@ function writeFile(vaultId, relPath, buffer, { mtime, baseHash } = {}) {
   fs.writeFileSync(full, buffer);
   if (mtime) touchMtime(full, mtime);
   invalidateManifestCache(vaultId);
+  try {
+    gitSync.notifyChange(vaultId);
+  } catch {}
   const hash = sha256(buffer);
   return { written: true, conflict: null, currentHash: hash };
 }
@@ -328,6 +336,9 @@ function deleteFile(vaultId, relPath) {
   entries.push({ id, path: relPath, size: fs.statSync(path.join(trashDir(vaultId), id)).size, deletedAt: Date.now() });
   saveIndex(idxPath, entries);
   invalidateManifestCache(vaultId);
+  try {
+    gitSync.notifyChange(vaultId);
+  } catch {}
 
   return true;
 }

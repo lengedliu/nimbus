@@ -4,6 +4,7 @@ const vaultsStore = require('../vaults');
 const storage = require('../storage');
 const syncRules = require('../syncRules');
 const syncLogger = require('../syncLogger');
+const gitSync = require('../gitSync');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -268,6 +269,120 @@ router.delete('/:vaultId/sync-logs', async (req, res) => {
   const { vaultId } = req.params;
   await syncLogger.clearVaultLogs(vaultId);
   res.json({ ok: true });
+});
+
+// ---------------------------------- Git Auto-Backup ------------------------------
+
+// GET /api/vaults/:vaultId/git/status
+router.get('/:vaultId/git/status', async (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  try {
+    const status = await gitSync.getStatus(req.params.vaultId);
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/vaults/:vaultId/git/config
+router.get('/:vaultId/git/config', (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  const config = gitSync.loadConfig(req.params.vaultId);
+  res.json({
+    ...config,
+    hasToken: Boolean(config.token),
+    token: config.token ? '********' : '',
+  });
+});
+
+// POST /api/vaults/:vaultId/git/config
+router.post('/:vaultId/git/config', async (req, res) => {
+  if (!checkAccess(req, res, true)) return;
+  const { vaultId } = req.params;
+  const current = gitSync.loadConfig(vaultId);
+  const updates = { ...req.body };
+
+  // If token is placeholder or empty and wasn't intentionally cleared, keep existing
+  if (updates.token === '********' || updates.token === undefined) {
+    updates.token = current.token;
+  }
+
+  const saved = gitSync.saveConfig(vaultId, updates);
+  if (saved.remoteUrl && gitSync.isGitRepo(vaultId)) {
+    try {
+      await gitSync.initRepo(vaultId);
+    } catch {}
+  }
+
+  res.json({
+    ok: true,
+    config: {
+      ...saved,
+      hasToken: Boolean(saved.token),
+      token: saved.token ? '********' : '',
+    },
+  });
+});
+
+// POST /api/vaults/:vaultId/git/init
+router.post('/:vaultId/git/init', async (req, res) => {
+  if (!checkAccess(req, res, true)) return;
+  try {
+    const result = await gitSync.initRepo(req.params.vaultId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/vaults/:vaultId/git/test
+router.post('/:vaultId/git/test', async (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  try {
+    const testResult = await gitSync.testConnection(req.params.vaultId, req.body || {});
+    res.json(testResult);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/vaults/:vaultId/git/commit-push
+router.post('/:vaultId/git/commit-push', async (req, res) => {
+  if (!checkAccess(req, res, true)) return;
+  const { vaultId } = req.params;
+  const { message } = req.body || {};
+  try {
+    const result = await gitSync.commitAndPush(vaultId, {
+      customMessage: message,
+      author: req.user.username || req.user.id,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/vaults/:vaultId/git/pull
+router.post('/:vaultId/git/pull', async (req, res) => {
+  if (!checkAccess(req, res, true)) return;
+  try {
+    const result = await gitSync.pull(req.params.vaultId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/vaults/:vaultId/git/logs
+router.get('/:vaultId/git/logs', async (req, res) => {
+  if (!checkAccess(req, res, false)) return;
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : 25;
+  try {
+    const logs = await gitSync.getLogs(req.params.vaultId, limit);
+    res.json({ logs });
+  } catch (err) {
+    res.status(500).json({ logs: [], error: err.message });
+  }
 });
 
 module.exports = router;

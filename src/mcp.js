@@ -4,6 +4,7 @@ const storage = require('./storage');
 const vaultsStore = require('./vaults');
 const sharesStore = require('./shares');
 const fnsHub = require('./wsHub');
+const gitSync = require('./gitSync');
 
 /*
  * MCP tool set for Nimbus Vault Sync, modeled after and extending the reference
@@ -839,6 +840,50 @@ function buildMcpServer(user, defaultVaultId) {
         expiresAt: record.expiresAt ? new Date(record.expiresAt).toISOString() : null,
         allowCopy: record.allowCopy,
       });
+    }
+  );
+
+  // ------------------------- 9. Git Automation & Remote Sync -------------------------
+
+  server.tool(
+    'get_vault_git_status',
+    'Get Git version control and remote synchronization status of a vault (branch, uncommitted changes, unpushed commits, last commit info).',
+    {
+      vaultId: z.string().optional().describe('Vault ID (defaults to default vault).'),
+    },
+    async ({ vaultId }) => {
+      const id = resolveVaultId(vaultId);
+      const status = await gitSync.getStatus(id);
+      return jsonResult(status);
+    }
+  );
+
+  server.tool(
+    'git_sync_vault',
+    'Commit all current vault changes and push/pull to configured remote Git repository (GitHub, Gitee, GitLab).',
+    {
+      vaultId: z.string().optional().describe('Vault ID (defaults to default vault).'),
+      action: z.enum(['commit_and_push', 'pull', 'test_connection']).default('commit_and_push').describe('Git action to perform.'),
+      commitMessage: z.string().optional().describe('Optional custom commit message.'),
+    },
+    async ({ vaultId, action = 'commit_and_push', commitMessage }) => {
+      const id = resolveVaultId(vaultId);
+
+      if (action === 'test_connection') {
+        const testRes = await gitSync.testConnection(id);
+        return jsonResult(testRes);
+      }
+
+      if (action === 'pull') {
+        const pullRes = await gitSync.pull(id);
+        return jsonResult(pullRes);
+      }
+
+      const result = await gitSync.commitAndPush(id, {
+        customMessage: commitMessage,
+        author: user.username || user.id,
+      });
+      return jsonResult(result);
     }
   );
 
