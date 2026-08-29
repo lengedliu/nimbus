@@ -1121,6 +1121,201 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
   line-height: 1.5;
 }
 
+/* ----------------- MCP Explorer & Modal ----------------- */
+.mcp-nav-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  background: var(--panel-2);
+}
+.mcp-nav-tab {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mcp-nav-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.mcp-tool-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s ease;
+}
+.mcp-tool-card:hover {
+  border-color: rgba(88, 166, 255, 0.4);
+}
+.mcp-tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.mcp-tool-name {
+  font-family: ui-monospace, monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.mcp-tool-category {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+.mcp-tool-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.mcp-tool-params {
+  font-size: 11.5px;
+  background: var(--bg);
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  line-height: 1.4;
+}
+.mcp-tool-params strong {
+  color: var(--text);
+}
+
+/* ----------------- REST API Docs Explorer ----------------- */
+.api-endpoint-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  transition: all 0.15s ease;
+}
+.api-endpoint-card:hover {
+  border-color: rgba(88, 166, 255, 0.4);
+}
+.api-endpoint-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.badge-method {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.badge-method.get {
+  background: rgba(46, 160, 67, 0.15);
+  color: #3fb950;
+  border: 1px solid rgba(46, 160, 67, 0.3);
+}
+.badge-method.post {
+  background: rgba(31, 111, 235, 0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(31, 111, 235, 0.3);
+}
+.badge-method.put {
+  background: rgba(210, 153, 34, 0.15);
+  color: #d29922;
+  border: 1px solid rgba(210, 153, 34, 0.3);
+}
+.badge-method.delete {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+  border: 1px solid rgba(248, 81, 73, 0.3);
+}
+.api-endpoint-path {
+  font-family: ui-monospace, monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.api-endpoint-auth {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  margin-left: auto;
+}
+.api-endpoint-summary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.api-endpoint-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+.api-curl-box {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-top: 8px;
+}
+.api-copy-curl-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.api-copy-curl-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.api-category-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 12px 0 6px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+
+
 /* ----------------- Toast ----------------- */
 .toast {
   position: fixed;

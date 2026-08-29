@@ -299,6 +299,13 @@
       showMcpModal(currentVault ? currentVault.name : 'Default');
     });
 
+    const docsBtn = $('#global-docs-btn');
+    if (docsBtn) {
+      docsBtn.addEventListener('click', () => {
+        showDocsModal();
+      });
+    }
+
     setupGlobalSearch();
 
     await loadVaults();
@@ -533,47 +540,322 @@
     });
   }
 
-  function showMcpModal(vaultName) {
-    const config = {
-      mcpServers: {
-        nimbus: {
-          url: state.serverBase.replace(/\/$/, '') + '/api/mcp',
-          type: 'http',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${state.token}`,
-            'X-Default-Vault-Name': vaultName,
+  async function showMcpModal(defaultVaultName) {
+    const selectedVaultName = defaultVaultName || (state.vaults && state.vaults[0] ? state.vaults[0].name : '');
+    
+    let toolsData = [];
+    try {
+      const res = await api('/api/mcp/tools');
+      if (res.ok) {
+        const body = await res.json();
+        toolsData = body.tools || [];
+      }
+    } catch {
+      toolsData = [];
+    }
+
+    function generateConfig(vaultName) {
+      return {
+        mcpServers: {
+          'nimbus-fast-note-sync': {
+            url: state.serverBase.replace(/\/$/, '') + '/api/mcp',
+            type: 'http',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${state.token}`,
+              'X-Default-Vault-Name': vaultName,
+            },
           },
         },
-      },
-    };
+      };
+    }
 
-    const text = JSON.stringify(config, null, 2);
+    const initialConfig = JSON.stringify(generateConfig(selectedVaultName), null, 2);
+
     const html = `
       <div class="modal-header">
-        <h3>🤖 Model Context Protocol (MCP) AI 配置</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">🤖</span>
+          <div>
+            <h3 style="margin:0;font-size:16px">Model Context Protocol (MCP) 服务与工具接口</h3>
+            <div style="font-size:11.5px;color:var(--muted)">支持 Cursor、Cherry Studio、Claude Desktop、Cline 等 AI 客户端实时读写 Obsidian 笔记</div>
+          </div>
+        </div>
         <button class="modal-close ghost">✕</button>
       </div>
-      <div class="modal-body">
-        <p style="color:var(--text-secondary);margin-bottom:12px">
-          将此配置粘贴到 Cursor、Claude Desktop 或 Cherry Studio 的 <code>mcp.json</code> 中，AI 即可直接检索、阅读与编写您的 Obsidian 笔记：
-        </p>
-        <pre class="code-snippet">${escapeHtml(text)}</pre>
+      <div class="mcp-nav-tabs">
+        <button class="mcp-nav-tab active" id="mcp-tab-config-btn">⚙️ 客户端连接配置</button>
+        <button class="mcp-nav-tab" id="mcp-tab-tools-btn">🛠️ 18 个 MCP 工具清单 (${toolsData.length || 18})</button>
+      </div>
+      <div class="modal-body" style="max-height:65vh;overflow-y:auto;padding:16px 20px;">
+        <div id="mcp-tab-config-view">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+            <div style="font-size:13px;color:var(--text-secondary)">
+              选择绑定的默认笔记库：
+            </div>
+            <select id="mcp-vault-select" style="padding:4px 10px;font-size:12.5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+              ${(state.vaults || []).map((v) => `<option value="${escapeHtml(v.name)}" ${v.name === selectedVaultName ? 'selected' : ''}>${escapeHtml(v.name)}</option>`).join('')}
+            </select>
+          </div>
+
+          <p style="color:var(--text-secondary);font-size:12.5px;margin-bottom:8px">
+            将以下配置填入 AI 编辑器或客户端（如 Cursor <code>Settings > MCP</code>、Cherry Studio、Claude <code>mcp.json</code>）：
+          </p>
+          <pre class="code-snippet" id="mcp-config-code" style="max-height:220px">${escapeHtml(initialConfig)}</pre>
+
+          <div style="margin-top:16px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:12px;color:var(--text-secondary);">
+            <div style="font-weight:600;color:var(--text);margin-bottom:6px">⚡ 实时同步与高并发特性：</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.6">
+              <li><strong>双向即时生效</strong>：AI 写入、追加或重命名笔记后，自动通过 WebSocket 实时推送到所有手机、电脑的 Obsidian 客户端。</li>
+              <li><strong>防冲突保护 (Conflict-Safe)</strong>：当多人或多端同时修改时，自动保存冲突快照，避免内容被意外覆盖。</li>
+              <li><strong>历史快照备份</strong>：每次 AI 修改均在服务器自动归档版本历史，可随时溯源与回滚。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="mcp-tab-tools-view" style="display:none">
+          <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="mcp-tools-search" placeholder="🔍 搜索 MCP 工具名称、分类或描述..." style="flex:1;min-width:200px;padding:6px 12px;font-size:12.5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);" />
+            <span style="font-size:11.5px;color:var(--muted)">共 ${toolsData.length || 18} 个标准工具</span>
+          </div>
+
+          <div id="mcp-tools-list-container">
+            ${toolsData.map((t) => `
+              <div class="mcp-tool-card" data-name="${escapeHtml(t.name.toLowerCase())}" data-desc="${escapeHtml(t.description.toLowerCase())}" data-cat="${escapeHtml((t.category || '').toLowerCase())}">
+                <div class="mcp-tool-header">
+                  <span class="mcp-tool-name">${escapeHtml(t.name)}</span>
+                  <span class="mcp-tool-category">${escapeHtml(t.category || '核心工具')}</span>
+                </div>
+                <div class="mcp-tool-desc">${escapeHtml(t.description)}</div>
+                ${t.parameters && Object.keys(t.parameters).length > 0 ? `
+                  <div class="mcp-tool-params">
+                    <strong>参数：</strong> ${Object.entries(t.parameters).map(([k, v]) => `<code>${escapeHtml(k)}</code>: ${escapeHtml(v)}`).join(' · ')}
+                  </div>
+                ` : '<div class="mcp-tool-params" style="color:var(--muted)">无必填参数</div>'}
+              </div>
+            `).join('')}
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button id="copy-mcp-btn" class="btn-primary">📋 复制 MCP 配置</button>
+        <button id="copy-mcp-btn" class="btn-primary">📋 复制当前 MCP 配置</button>
         <button class="modal-close secondary">关闭</button>
       </div>
     `;
 
     showModal(html, (dialog) => {
-      dialog.querySelector('#copy-mcp-btn').onclick = () => {
+      let currentVaultName = selectedVaultName;
+
+      const tabConfigBtn = dialog.querySelector('#mcp-tab-config-btn');
+      const tabToolsBtn = dialog.querySelector('#mcp-tab-tools-btn');
+      const tabConfigView = dialog.querySelector('#mcp-tab-config-view');
+      const tabToolsView = dialog.querySelector('#mcp-tab-tools-view');
+      const copyBtn = dialog.querySelector('#copy-mcp-btn');
+      const vaultSelect = dialog.querySelector('#mcp-vault-select');
+      const codeSnippet = dialog.querySelector('#mcp-config-code');
+      const searchInput = dialog.querySelector('#mcp-tools-search');
+
+      function updateSnippet() {
+        const conf = generateConfig(currentVaultName);
+        const text = JSON.stringify(conf, null, 2);
+        if (codeSnippet) codeSnippet.textContent = text;
+        return text;
+      }
+
+      if (vaultSelect) {
+        vaultSelect.onchange = (e) => {
+          currentVaultName = e.target.value;
+          updateSnippet();
+        };
+      }
+
+      tabConfigBtn.onclick = () => {
+        tabConfigBtn.classList.add('active');
+        tabToolsBtn.classList.remove('active');
+        tabConfigView.style.display = 'block';
+        tabToolsView.style.display = 'none';
+        copyBtn.style.display = 'inline-flex';
+      };
+
+      tabToolsBtn.onclick = () => {
+        tabToolsBtn.classList.add('active');
+        tabConfigBtn.classList.remove('active');
+        tabToolsView.style.display = 'block';
+        tabConfigView.style.display = 'none';
+      };
+
+      if (searchInput) {
+        searchInput.oninput = (e) => {
+          const q = e.target.value.toLowerCase().trim();
+          dialog.querySelectorAll('.mcp-tool-card').forEach((card) => {
+            const name = card.getAttribute('data-name') || '';
+            const desc = card.getAttribute('data-desc') || '';
+            const cat = card.getAttribute('data-cat') || '';
+            const match = !q || name.includes(q) || desc.includes(q) || cat.includes(q);
+            card.style.display = match ? 'block' : 'none';
+          });
+        };
+      }
+
+      copyBtn.onclick = () => {
+        const text = updateSnippet();
         if (navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(text).then(() => toast('MCP 配置已复制'));
+          navigator.clipboard.writeText(text).then(() => toast('MCP JSON 配置已复制到剪贴板'));
         } else {
           prompt('复制 MCP 配置：', text);
         }
       };
+    });
+  }
+
+  async function showDocsModal() {
+    let spec = null;
+    try {
+      const res = await api('/api/docs/spec');
+      if (res.ok) {
+        spec = await res.json();
+      }
+    } catch {
+      spec = null;
+    }
+
+    const categories = spec?.categories || [];
+    const baseUrl = (state.serverBase || window.location.origin).replace(/\/$/, '');
+    const currentToken = state.token || '<YOUR_JWT_TOKEN>';
+    const sampleVaultId = state.activeVaultId || (state.vaults && state.vaults[0] ? state.vaults[0].id : 'vlt_sample');
+
+    function buildCurl(ep) {
+      const fullUrl = baseUrl + ep.path.replace(':vaultId', sampleVaultId).replace('*', 'Daily/2026-08-29.md').replace(':versionId', 'ver_01').replace(':trashId', 'tsh_01').replace(':shareId', 'shr_01');
+      let lines = [`curl -X ${ep.method} "${fullUrl}"`];
+      
+      if (ep.auth && ep.auth.includes('Bearer')) {
+        lines.push(`  -H "Authorization: Bearer ${currentToken}"`);
+      }
+      if (ep.headers) {
+        for (const [k, v] of Object.entries(ep.headers)) {
+          if (k.toLowerCase() !== 'authorization') {
+            lines.push(`  -H "${k}: ${v}"`);
+          }
+        }
+      }
+      if (ep.body && (ep.method === 'POST' || ep.method === 'PUT')) {
+        if (typeof ep.body === 'object') {
+          lines.push(`  -d '${JSON.stringify(ep.body)}'`);
+        } else {
+          lines.push(`  -d '${ep.body}'`);
+        }
+      }
+      return lines.join(' \\\n');
+    }
+
+    let totalEndpoints = 0;
+    categories.forEach((c) => {
+      totalEndpoints += (c.endpoints || []).length;
+    });
+
+    const html = `
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">📖</span>
+          <div>
+            <h3 style="margin:0;font-size:16px">REST API 开发者与接口说明文档</h3>
+            <div style="font-size:11.5px;color:var(--muted)">涵盖认证、笔记库、文件增量读写、历史快照、回收站、冲突管理、外链分享及 MCP 接口</div>
+          </div>
+        </div>
+        <button class="modal-close ghost">✕</button>
+      </div>
+
+      <div style="padding:12px 20px 0;background:var(--panel-2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:260px;margin-bottom:12px;">
+          <input type="text" id="api-docs-search" placeholder="🔍 快速搜索 API 路径、方法 (如 GET /api/vaults)、描述..." style="flex:1;padding:6px 12px;font-size:12.5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);" />
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+          <span>共 <strong>${totalEndpoints}</strong> 个标准端点</span>
+          <a href="/api/docs/spec" target="_blank" class="btn-sm secondary" style="text-decoration:none;padding:4px 8px;font-size:11.5px;display:inline-flex;align-items:center;gap:4px;">📄 查看 JSON 规范</a>
+        </div>
+      </div>
+
+      <div class="modal-body" style="max-height:68vh;overflow-y:auto;padding:16px 20px;">
+        <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.2);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--text-secondary);margin-bottom:16px;">
+          💡 <strong>调用指引</strong>：所有接口请求基础地址为 <code>${escapeHtml(baseUrl)}</code>。需要认证的接口请在 Header 中添加 <code>Authorization: Bearer &lt;Token&gt;</code>。下方 cURL 示例已自动填充您的当前登录 Token 与默认 Vault ID。
+        </div>
+
+        <div id="api-docs-list">
+          ${categories.map((cat) => `
+            <div class="api-category-block" data-cat="${escapeHtml(cat.category)}">
+              <div class="api-category-header">📁 ${escapeHtml(cat.category)}</div>
+              ${(cat.endpoints || []).map((ep) => {
+                const methodLower = (ep.method || 'get').toLowerCase();
+                const curlText = buildCurl(ep);
+                return `
+                  <div class="api-endpoint-card" data-method="${methodLower}" data-path="${escapeHtml(ep.path.toLowerCase())}" data-summary="${escapeHtml((ep.summary || '').toLowerCase())}" data-desc="${escapeHtml((ep.desc || '').toLowerCase())}">
+                    <div class="api-endpoint-header">
+                      <span class="badge-method ${methodLower}">${escapeHtml(ep.method)}</span>
+                      <span class="api-endpoint-path">${escapeHtml(ep.path)}</span>
+                      <span class="api-endpoint-auth">${escapeHtml(ep.auth || '公开')}</span>
+                    </div>
+                    <div class="api-endpoint-summary">${escapeHtml(ep.summary || '')}</div>
+                    <div class="api-endpoint-desc">${escapeHtml(ep.desc || '')}</div>
+
+                    ${ep.params && Object.keys(ep.params).length > 0 ? `
+                      <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">
+                        <strong>URL 参数：</strong> ${Object.entries(ep.params).map(([k, v]) => `<code>${escapeHtml(k)}</code>: ${escapeHtml(v)}`).join(' · ')}
+                      </div>
+                    ` : ''}
+
+                    ${ep.body ? `
+                      <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">
+                        <strong>请求体 (Body)：</strong> <pre style="display:inline;background:none;border:none;padding:0;font-size:11px;color:var(--text)">${escapeHtml(typeof ep.body === 'object' ? JSON.stringify(ep.body) : ep.body)}</pre>
+                      </div>
+                    ` : ''}
+
+                    <div class="api-curl-box">
+                      <button class="api-copy-curl-btn" data-curl="${escapeHtml(curlText)}">📋 复制 cURL</button>
+                      <pre style="margin:0;background:none;border:none;padding:0;color:var(--text);font-size:11px;">${escapeHtml(curlText)}</pre>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-close secondary">关闭文档</button>
+      </div>
+    `;
+
+    showModal(html, (dialog) => {
+      const searchInput = dialog.querySelector('#api-docs-search');
+      if (searchInput) {
+        searchInput.oninput = (e) => {
+          const q = e.target.value.toLowerCase().trim();
+          dialog.querySelectorAll('.api-category-block').forEach((catBlock) => {
+            let catHasMatch = false;
+            catBlock.querySelectorAll('.api-endpoint-card').forEach((card) => {
+              const method = card.getAttribute('data-method') || '';
+              const path = card.getAttribute('data-path') || '';
+              const summary = card.getAttribute('data-summary') || '';
+              const desc = card.getAttribute('data-desc') || '';
+              const match = !q || method.includes(q) || path.includes(q) || summary.includes(q) || desc.includes(q);
+              card.style.display = match ? 'block' : 'none';
+              if (match) catHasMatch = true;
+            });
+            catBlock.style.display = catHasMatch ? 'block' : 'none';
+          });
+        };
+      }
+
+      dialog.querySelectorAll('.api-copy-curl-btn').forEach((btn) => {
+        btn.onclick = () => {
+          const curl = btn.getAttribute('data-curl');
+          if (curl && navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(curl).then(() => toast('cURL 命令已复制'));
+          } else if (curl) {
+            prompt('复制 cURL 命令：', curl);
+          }
+        };
+      });
     });
   }
 
