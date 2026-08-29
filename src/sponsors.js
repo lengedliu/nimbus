@@ -162,7 +162,7 @@ const INITIAL_SPONSORS = [
 ];
 
 const DEFAULT_CONFIG = {
-  kofiUrl: 'https://ko-fi.com/haierkeys',
+  kofiUrl: '', // 留空则前端渲染为不可点击或提示状态
   kofiLabel: '请作者喝杯咖啡',
   wechatQrUrl: '', // base64 or URL
   wechatLabel: '微信打赏支持',

@@ -6311,15 +6311,31 @@
               <span class="sponsor-card-title">${escapeHtml(config.kofiLabel || '请作者喝杯咖啡')}</span>
             </div>
             <div class="sponsor-card-body">
-              <a href="${escapeHtml(config.kofiUrl || 'https://ko-fi.com/haierkeys')}" target="_blank" rel="noopener noreferrer" class="kofi-btn-link" title="点击在 Ko-fi 上赞助作者">
-                <div class="kofi-badge-box">
-                  <span class="kofi-text">Support me on</span>
-                  <div class="kofi-logo-wrap">
-                    <span class="kofi-cup">☕</span>
-                    <span class="kofi-brand">Ko-fi</span>
+              ${
+                config.kofiUrl
+                  ? `
+                <a href="${escapeHtml(config.kofiUrl)}" target="_blank" rel="noopener noreferrer" class="kofi-btn-link" title="点击在 Ko-fi 上赞助作者">
+                  <div class="kofi-badge-box">
+                    <span class="kofi-text">Support me on</span>
+                    <div class="kofi-logo-wrap">
+                      <span class="kofi-cup">☕</span>
+                      <span class="kofi-brand">Ko-fi</span>
+                    </div>
+                  </div>
+                </a>
+              `
+                  : `
+                <div class="kofi-btn-link" style="cursor:default;" title="请作者喝杯咖啡">
+                  <div class="kofi-badge-box">
+                    <span class="kofi-text">Support me on</span>
+                    <div class="kofi-logo-wrap">
+                      <span class="kofi-cup">☕</span>
+                      <span class="kofi-brand">Ko-fi</span>
+                    </div>
                   </div>
                 </div>
-              </a>
+              `
+              }
             </div>
           </div>
 
@@ -6695,8 +6711,8 @@
             <textarea id="sp-cfg-desc" rows="2" style="width:100%;font-size:12px;">${escapeHtml(cfg.descriptionText || '')}</textarea>
           </div>
           <div class="form-group" style="margin-bottom:12px;">
-            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Ko-fi 赞助主页链接</label>
-            <input type="text" id="sp-cfg-kofi-url" value="${escapeHtml(cfg.kofiUrl || 'https://ko-fi.com/haierkeys')}" style="width:100%;font-size:12px;" />
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Ko-fi 赞助主页链接 (可留空)</label>
+            <input type="text" id="sp-cfg-kofi-url" value="${escapeHtml(cfg.kofiUrl || '')}" placeholder="如 https://ko-fi.com/username (留空则仅展示徽标)" style="width:100%;font-size:12px;" />
           </div>
           <div class="form-group" style="margin-bottom:12px;">
             <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">微信赞赏码图片 URL 或 Base64 (留空使用默认精致矢量图)</label>
