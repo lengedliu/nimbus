@@ -31,6 +31,7 @@
     fileFilter: 'all', // 'all' | 'md' | 'media' | 'config'
     fileViewMode: localStorage.getItem('nimbus_file_view_mode') || 'tree', // 'tree' | 'flat'
     expandedFolders: new Set(),
+    treeFoldersInitialized: false,
     searchQuery: '',
   };
 
@@ -578,6 +579,9 @@
   // --------------------------- Vault Main Views -------------------------------
 
   async function openVault(vaultId, subtab = 'files') {
+    if (state.activeVaultId !== vaultId) {
+      state.treeFoldersInitialized = false;
+    }
     state.activeVaultId = vaultId;
     state.activeSubtab = subtab;
     state.activeTab = null;
@@ -854,8 +858,10 @@
   function renderTreeFileList(vaultId, listWrapper, paths, manifest) {
     const { root, allFolderPaths } = buildFileTree(paths, manifest);
 
-    // If first load or empty, default all folders to expanded
-    if (state.expandedFolders.size === 0) {
+    // If first load for this vault, default all folders to expanded
+    if (!state.treeFoldersInitialized) {
+      state.treeFoldersInitialized = true;
+      state.expandedFolders.clear();
       allFolderPaths.forEach((fp) => state.expandedFolders.add(fp));
     }
 
