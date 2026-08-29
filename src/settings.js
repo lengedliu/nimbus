@@ -19,6 +19,13 @@ const DEFAULT_SYSTEM_SETTINGS = {
   syncHiddenConfig: true,
   syncAttachments: true,
   autoPurgeTrash: false,
+  webhook_config: {
+    enabled: false,
+    platform: 'custom',
+    url: '',
+    secret: '',
+    events: ['conflict.detected', 'conflict.resolved', 'backup.created', 'device.connected', 'file.deleted'],
+  },
   defaultIgnorePatterns: [
     '.obsidian/workspace.json',
     '.obsidian/workspace-mobile.json',
@@ -235,10 +242,21 @@ function generatePluginConfig({ serverUrl, vaultId, token, deviceName = 'Obsidia
 
 refreshCacheFromJson();
 
+function get(key) {
+  return cachedSettings[key];
+}
+
+function set(key, val) {
+  updateSystemSettings({ [key]: val });
+  return val;
+}
+
 module.exports = {
   DEFAULT_SYSTEM_SETTINGS,
   getSystemSettings,
   updateSystemSettings,
+  get,
+  set,
   listTokensForUser,
   createTokenForUser,
   revokeToken,

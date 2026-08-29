@@ -3520,7 +3520,7 @@
     try {
       const res = await api('/api/settings/webhooks');
       const data = await res.json();
-      const config = data.webhooks || {
+      const config = data.config || data.webhooks || {
         enabled: false,
         platform: 'custom',
         url: '',

@@ -222,16 +222,19 @@ const webhooks = require('../webhooks');
 
 router.get('/webhooks', (req, res) => {
   const config = webhooks.getWebhookConfig();
-  res.json({ ok: true, config });
+  res.json({ ok: true, config, webhooks: config });
 });
 
-router.put('/webhooks', (req, res) => {
+const handleSaveWebhooks = (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: '只有管理员有权限配置全局 Webhook' });
   }
   const updated = webhooks.saveWebhookConfig(req.body || {});
-  res.json({ ok: true, config: updated, message: 'Webhook 设置已更新' });
-});
+  res.json({ ok: true, config: updated, webhooks: updated, message: 'Webhook 设置已更新' });
+};
+
+router.put('/webhooks', handleSaveWebhooks);
+router.post('/webhooks', handleSaveWebhooks);
 
 router.post('/webhooks/test', async (req, res) => {
   try {
