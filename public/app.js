@@ -880,8 +880,8 @@
         <span>📁 <strong>原始目录结构</strong> · 共 ${allFolderPaths.length} 个文件夹 · ${paths.length} 个文件</span>
       </div>
       <div class="tree-toolbar-controls">
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);">
-          <span>排序:</span>
+        <label class="tree-sort-label">
+          <span style="white-space:nowrap;flex-shrink:0;">排序:</span>
           <select class="tree-sort-select" id="tree-sort-select" title="选择目录内笔记文件的排序规则">
             <option value="ctime-desc" ${state.treeSortOrder === 'ctime-desc' ? 'selected' : ''}>⏳ 创建时间 (最新优先)</option>
             <option value="ctime-asc" ${state.treeSortOrder === 'ctime-asc' ? 'selected' : ''}>⌛ 创建时间 (最旧优先)</option>
