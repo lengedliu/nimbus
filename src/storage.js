@@ -108,8 +108,9 @@ function getManifest(vaultId, forceRefresh = false) {
       } else {
         hash = sha256(fs.readFileSync(full));
       }
-      nextCache[rel] = { size: stat.size, mtimeMs: stat.mtimeMs, hash };
-      manifest[rel] = { size: stat.size, mtime: stat.mtimeMs, hash };
+      const ctime = (stat.birthtimeMs && stat.birthtimeMs > 0) ? stat.birthtimeMs : (stat.ctimeMs || stat.mtimeMs);
+      nextCache[rel] = { size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: ctime, hash };
+      manifest[rel] = { size: stat.size, mtime: stat.mtimeMs, ctime, hash };
     } catch {
       // File could be deleted or locked concurrently
     }

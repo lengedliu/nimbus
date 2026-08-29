@@ -1960,9 +1960,24 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
   color: var(--text);
 }
 
+.tree-sort-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11.5px;
+  padding: 3px 8px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+.tree-sort-select:hover, .tree-sort-select:focus {
+  border-color: var(--accent);
+}
+
 .tree-header-row {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) 110px 170px 180px;
+  grid-template-columns: minmax(240px, 1fr) 90px 155px 155px 170px;
   align-items: center;
   padding: 9px 14px;
   background: var(--panel-2);
@@ -1976,7 +1991,7 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
 
 .tree-node-row {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) 110px 170px 180px;
+  grid-template-columns: minmax(240px, 1fr) 90px 155px 155px 170px;
   align-items: center;
   padding: 7px 14px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.1);

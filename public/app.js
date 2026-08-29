@@ -30,6 +30,7 @@
     activeTab: null, // 'vault' | 'users' | 'all-vaults'
     fileFilter: 'all', // 'all' | 'md' | 'media' | 'config'
     fileViewMode: localStorage.getItem('nimbus_file_view_mode') || 'tree', // 'tree' | 'flat'
+    treeSortOrder: localStorage.getItem('nimbus_tree_sort_order') || 'ctime-desc', // 'ctime-desc' | 'ctime-asc' | 'mtime-desc' | 'name-asc'
     expandedFolders: new Set(),
     treeFoldersInitialized: false,
     searchQuery: '',
@@ -769,7 +770,7 @@
         const subPath = parts.slice(0, i + 1).join('/');
 
         if (isFile) {
-          const meta = manifest[p] || { size: 0, mtime: Date.now() };
+          const meta = manifest[p] || { size: 0, mtime: Date.now(), ctime: Date.now() };
           current.children[part] = {
             name: part,
             path: subPath,
@@ -879,11 +880,29 @@
         <span>📁 <strong>原始目录结构</strong> · 共 ${allFolderPaths.length} 个文件夹 · ${paths.length} 个文件</span>
       </div>
       <div class="tree-toolbar-controls">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);">
+          <span>排序:</span>
+          <select class="tree-sort-select" id="tree-sort-select" title="选择目录内笔记文件的排序规则">
+            <option value="ctime-desc" ${state.treeSortOrder === 'ctime-desc' ? 'selected' : ''}>⏳ 创建时间 (最新优先)</option>
+            <option value="ctime-asc" ${state.treeSortOrder === 'ctime-asc' ? 'selected' : ''}>⌛ 创建时间 (最旧优先)</option>
+            <option value="mtime-desc" ${state.treeSortOrder === 'mtime-desc' ? 'selected' : ''}>📝 修改时间 (最新优先)</option>
+            <option value="name-asc" ${state.treeSortOrder === 'name-asc' ? 'selected' : ''}>🔤 文件名称 (A-Z)</option>
+          </select>
+        </label>
         <button class="tree-ctrl-btn" id="tree-expand-all-btn">➕ 全部展开</button>
         <button class="tree-ctrl-btn" id="tree-collapse-all-btn">➖ 全部折叠</button>
       </div>
     `;
     wrapper.appendChild(bar);
+
+    const sortSelect = bar.querySelector('#tree-sort-select');
+    if (sortSelect) {
+      sortSelect.onchange = () => {
+        state.treeSortOrder = sortSelect.value;
+        localStorage.setItem('nimbus_tree_sort_order', state.treeSortOrder);
+        renderFileList(vaultId, listWrapper);
+      };
+    }
 
     bar.querySelector('#tree-expand-all-btn').onclick = () => {
       allFolderPaths.forEach((fp) => state.expandedFolders.add(fp));
@@ -900,6 +919,7 @@
     header.innerHTML = `
       <div>名称 / 目录层级</div>
       <div>大小</div>
+      <div>创建时间</div>
       <div>修改时间</div>
       <div style="text-align:right">操作</div>
     `;
@@ -912,10 +932,33 @@
       const keys = Object.keys(node.children).sort((a, b) => {
         const itemA = node.children[a];
         const itemB = node.children[b];
+        // Folders always come first
         if (itemA.type !== itemB.type) {
           return itemA.type === 'folder' ? -1 : 1;
         }
-        return a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' });
+        // If both are folders, sort alphabetically by folder name
+        if (itemA.type === 'folder') {
+          return itemA.name.localeCompare(itemB.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+        }
+        // For files within directory: sort by creation time (or user selected order)
+        const sortOrder = state.treeSortOrder || 'ctime-desc';
+        const ctimeA = itemA.meta?.ctime || itemA.meta?.mtime || 0;
+        const ctimeB = itemB.meta?.ctime || itemB.meta?.mtime || 0;
+        const mtimeA = itemA.meta?.mtime || 0;
+        const mtimeB = itemB.meta?.mtime || 0;
+
+        if (sortOrder === 'ctime-desc') {
+          if (ctimeB !== ctimeA) return ctimeB - ctimeA;
+          return itemA.name.localeCompare(itemB.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+        } else if (sortOrder === 'ctime-asc') {
+          if (ctimeA !== ctimeB) return ctimeA - ctimeB;
+          return itemA.name.localeCompare(itemB.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+        } else if (sortOrder === 'mtime-desc') {
+          if (mtimeB !== mtimeA) return mtimeB - mtimeA;
+          return itemA.name.localeCompare(itemB.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+        } else {
+          return itemA.name.localeCompare(itemB.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+        }
       });
 
       for (const key of keys) {
@@ -939,7 +982,8 @@
               <span class="tree-badge">${item.fileCount} 项</span>
             </div>
             <div class="tree-meta-col">${formatBytes(item.totalSize)}</div>
-            <div class="tree-meta-col">-</div>
+            <div class="tree-meta-col" style="color:var(--text-muted);font-size:12px;">-</div>
+            <div class="tree-meta-col" style="color:var(--text-muted);font-size:12px;">-</div>
             <div class="tree-actions-col"></div>
           `;
 
@@ -960,12 +1004,29 @@
         } else {
           // File row
           const p = item.path;
-          const meta = item.meta;
+          const meta = item.meta || {};
           const isMd = p.toLowerCase().endsWith('.md');
           const isHtml = /\.(html|htm)$/i.test(p);
           const isImg = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(p);
           const isPdf = /\.pdf$/i.test(p);
           const icon = isMd ? '📄' : isHtml ? '🌐' : isImg ? '🖼️' : isPdf ? '📕' : p.startsWith('.obsidian/') ? '⚙️' : '📎';
+
+          const ctimeVal = meta.ctime || meta.mtime || Date.now();
+          const mtimeVal = meta.mtime || Date.now();
+          const ctimeStr = new Date(ctimeVal).toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          const mtimeStr = new Date(mtimeVal).toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
 
           const row = document.createElement('div');
           row.className = 'tree-node-row file-row';
@@ -980,10 +1041,11 @@
               ${indentHtml}
               <span class="tree-indent-spacer" style="width:18px;"></span>
               <span class="tree-icon">${icon}</span>
-              <span class="tree-name-text">${escapeHtml(item.name)}</span>
+              <span class="tree-name-text" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
             </div>
             <div class="tree-meta-col">${formatBytes(meta.size)}</div>
-            <div class="tree-meta-col">${new Date(meta.mtime).toLocaleString()}</div>
+            <div class="tree-meta-col" title="创建时间: ${ctimeStr}">${ctimeStr}</div>
+            <div class="tree-meta-col" title="修改时间: ${mtimeStr}">${mtimeStr}</div>
             <div class="tree-actions-col"></div>
           `;
 
@@ -1038,14 +1100,38 @@
   }
 
   function renderFlatFileList(vaultId, listWrapper, paths, manifest) {
+    const sortedPaths = [...paths].sort((a, b) => {
+      const metaA = manifest[a] || {};
+      const metaB = manifest[b] || {};
+      const sortOrder = state.treeSortOrder || 'ctime-desc';
+      const ctimeA = metaA.ctime || metaA.mtime || 0;
+      const ctimeB = metaB.ctime || metaB.mtime || 0;
+      const mtimeA = metaA.mtime || 0;
+      const mtimeB = metaB.mtime || 0;
+
+      if (sortOrder === 'ctime-desc') {
+        if (ctimeB !== ctimeA) return ctimeB - ctimeA;
+        return a.localeCompare(b, 'zh-CN', { numeric: true });
+      } else if (sortOrder === 'ctime-asc') {
+        if (ctimeA !== ctimeB) return ctimeA - ctimeB;
+        return a.localeCompare(b, 'zh-CN', { numeric: true });
+      } else if (sortOrder === 'mtime-desc') {
+        if (mtimeB !== mtimeA) return mtimeB - mtimeA;
+        return a.localeCompare(b, 'zh-CN', { numeric: true });
+      } else {
+        return a.localeCompare(b, 'zh-CN', { numeric: true });
+      }
+    });
+
     const table = document.createElement('table');
     table.className = 'file-table';
     table.innerHTML = `
       <thead>
         <tr>
           <th>文件路径</th>
-          <th style="width:120px">大小</th>
-          <th style="width:180px">修改时间</th>
+          <th style="width:100px">大小</th>
+          <th style="width:160px">创建时间</th>
+          <th style="width:160px">修改时间</th>
           <th style="width:200px;text-align:right">操作</th>
         </tr>
       </thead>
@@ -1053,19 +1139,25 @@
     `;
     const tbody = table.querySelector('tbody');
 
-    for (const p of paths) {
-      const meta = manifest[p] || { size: 0, mtime: Date.now() };
+    for (const p of sortedPaths) {
+      const meta = manifest[p] || { size: 0, mtime: Date.now(), ctime: Date.now() };
       const isMd = p.toLowerCase().endsWith('.md');
       const isHtml = /\.(html|htm)$/i.test(p);
       const isImg = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(p);
       const isPdf = /\.pdf$/i.test(p);
       const icon = isMd ? '📄' : isHtml ? '🌐' : isImg ? '🖼️' : isPdf ? '📕' : p.startsWith('.obsidian/') ? '⚙️' : '📎';
 
+      const ctimeVal = meta.ctime || meta.mtime || Date.now();
+      const mtimeVal = meta.mtime || Date.now();
+      const ctimeStr = new Date(ctimeVal).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const mtimeStr = new Date(mtimeVal).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><div class="file-name"><span>${icon}</span> <span>${escapeHtml(p)}</span></div></td>
         <td class="meta">${formatBytes(meta.size)}</td>
-        <td class="meta">${new Date(meta.mtime).toLocaleString()}</td>
+        <td class="meta">${ctimeStr}</td>
+        <td class="meta">${mtimeStr}</td>
         <td class="actions"></td>
       `;
 
