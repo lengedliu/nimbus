@@ -52,8 +52,22 @@ function loadCache(vaultId) {
   }
 }
 
+// In-memory manifest cache: vaultId -> { manifest, lastScanned }
+const inMemoryManifestCache = new Map();
+
+function invalidateManifestCache(vaultId) {
+  inMemoryManifestCache.delete(vaultId);
+}
+
 function saveCache(vaultId, cache) {
-  fs.writeFileSync(manifestCachePath(vaultId), JSON.stringify(cache));
+  const p = manifestCachePath(vaultId);
+  const tmp = p + '.tmp.' + Date.now();
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(cache));
+    fs.renameSync(tmp, p);
+  } catch {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
+  }
 }
 
 /** Recursively list all files under a vault's files/ dir. */
@@ -71,8 +85,13 @@ function walk(dir, base, out = []) {
   return out;
 }
 
-/** Build a manifest: { path: { size, mtimeMs, hash } }, cached by size+mtimeMs to avoid re-hashing unchanged files. */
-function getManifest(vaultId) {
+/** Build a manifest: { path: { size, mtimeMs, hash } }, cached in memory and on disk. */
+function getManifest(vaultId, forceRefresh = false) {
+  const cachedMem = inMemoryManifestCache.get(vaultId);
+  if (!forceRefresh && cachedMem && Date.now() - cachedMem.lastScanned < 3000) {
+    return cachedMem.manifest;
+  }
+
   const root = vaultFilesRoot(vaultId);
   const cache = loadCache(vaultId);
   const nextCache = {};
@@ -80,19 +99,24 @@ function getManifest(vaultId) {
 
   for (const rel of walk(root, root)) {
     const full = path.join(root, rel);
-    const stat = fs.statSync(full);
-    const cached = cache[rel];
-    let hash;
-    if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
-      hash = cached.hash;
-    } else {
-      hash = sha256(fs.readFileSync(full));
+    try {
+      const stat = fs.statSync(full);
+      const cached = cache[rel];
+      let hash;
+      if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+        hash = cached.hash;
+      } else {
+        hash = sha256(fs.readFileSync(full));
+      }
+      nextCache[rel] = { size: stat.size, mtimeMs: stat.mtimeMs, hash };
+      manifest[rel] = { size: stat.size, mtime: stat.mtimeMs, hash };
+    } catch {
+      // File could be deleted or locked concurrently
     }
-    nextCache[rel] = { size: stat.size, mtimeMs: stat.mtimeMs, hash };
-    manifest[rel] = { size: stat.size, mtime: stat.mtimeMs, hash };
   }
 
   saveCache(vaultId, nextCache);
+  inMemoryManifestCache.set(vaultId, { manifest, lastScanned: Date.now() });
   return manifest;
 }
 
@@ -125,7 +149,13 @@ function loadIndex(p) {
   }
 }
 function saveIndex(p, entries) {
-  fs.writeFileSync(p, JSON.stringify(entries));
+  const tmp = p + '.tmp.' + Date.now();
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(entries, null, 2));
+    fs.renameSync(tmp, p);
+  } catch {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
+  }
 }
 
 /** Snapshot the current (about-to-be-overwritten) content of a file into history. */
@@ -278,6 +308,7 @@ function writeFile(vaultId, relPath, buffer, { mtime, baseHash } = {}) {
 
   fs.writeFileSync(full, buffer);
   if (mtime) touchMtime(full, mtime);
+  invalidateManifestCache(vaultId);
   const hash = sha256(buffer);
   return { written: true, conflict: null, currentHash: hash };
 }
@@ -295,6 +326,7 @@ function deleteFile(vaultId, relPath) {
   const entries = loadIndex(idxPath);
   entries.push({ id, path: relPath, size: fs.statSync(path.join(trashDir(vaultId), id)).size, deletedAt: Date.now() });
   saveIndex(idxPath, entries);
+  invalidateManifestCache(vaultId);
 
   return true;
 }
@@ -399,8 +431,61 @@ function exportVaultZip(vaultId, outputStream) {
   return archive.finalize();
 }
 
+/**
+ * Clean up old history versions according to retention policy:
+ * - Keep all versions within maxDays (default 30 days)
+ * - Cap max versions per file (default 20)
+ * Returns { cleanedCount, freedBytes }
+ */
+function cleanupOldHistoryVersions(vaultId, maxDays = 30, maxVersionsPerPath = 20) {
+  const idxPath = historyIndexPath(vaultId);
+  let entries = loadIndex(idxPath);
+  if (!entries.length) return { cleanedCount: 0, freedBytes: 0 };
+
+  const cutoff = Date.now() - maxDays * 24 * 60 * 60 * 1000;
+  const byPath = new Map();
+
+  for (const entry of entries) {
+    if (!byPath.has(entry.path)) byPath.set(entry.path, []);
+    byPath.get(entry.path).push(entry);
+  }
+
+  const toKeep = [];
+  const toDrop = [];
+
+  for (const [filePath, fileEntries] of byPath.entries()) {
+    // Sort newest first
+    fileEntries.sort((a, b) => b.savedAt - a.savedAt);
+    fileEntries.forEach((entry, idx) => {
+      // Keep at least 1 most recent version even if older than cutoff
+      if (idx === 0) {
+        toKeep.push(entry);
+      } else if (idx >= maxVersionsPerPath || entry.savedAt < cutoff) {
+        toDrop.push(entry);
+      } else {
+        toKeep.push(entry);
+      }
+    });
+  }
+
+  let freedBytes = 0;
+  for (const drop of toDrop) {
+    const full = path.join(historyDir(vaultId), drop.id);
+    try {
+      if (fs.existsSync(full)) {
+        freedBytes += drop.size || 0;
+        fs.unlinkSync(full);
+      }
+    } catch {}
+  }
+
+  saveIndex(idxPath, toKeep);
+  return { cleanedCount: toDrop.length, freedBytes };
+}
+
 module.exports = {
   getManifest,
+  invalidateManifestCache,
   readFile,
   writeFile,
   deleteFile,
@@ -408,6 +493,7 @@ module.exports = {
   safeJoin,
   listHistory,
   readHistoryVersion,
+  cleanupOldHistoryVersions,
   listTrash,
   readTrashVersion,
   restoreFromTrash,

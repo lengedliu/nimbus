@@ -183,5 +183,26 @@ router.delete('/:vaultId/permissions/:userId', async (req, res) => {
   res.json({ ok: true });
 });
 
+// POST /api/vaults/:vaultId/history/cleanup (Trigger retention cleanup)
+router.post('/:vaultId/history/cleanup', (req, res) => {
+  const { vaultId } = req.params;
+  const { maxDays, maxVersions } = req.body || {};
+  const isAdmin = req.user.role === 'admin';
+  const vault = vaults.getById(vaultId);
+
+  if (!vault) return res.status(404).json({ error: 'Vault not found' });
+  if (!isAdmin && vault.ownerId !== req.user.id) {
+    return res.status(403).json({ error: '只有 Vault 创建者或管理员可清理历史版本' });
+  }
+
+  const result = storage.cleanupOldHistoryVersions(
+    vaultId,
+    Number(maxDays) > 0 ? Number(maxDays) : 30,
+    Number(maxVersions) > 0 ? Number(maxVersions) : 20
+  );
+
+  res.json({ ok: true, ...result, message: `已清理 ${result.cleanedCount} 个历史版本，释放 ${(result.freedBytes / 1024).toFixed(1)} KB 空间` });
+});
+
 module.exports = router;
 

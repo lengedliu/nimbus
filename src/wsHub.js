@@ -30,14 +30,37 @@ const webhooks = require('./webhooks');
  */
 class FnsHub {
   constructor() {
-    // vaultId -> Set of { ws, userId, deviceId, connectedAt }
+    // vaultId -> Set of { ws, userId, deviceId, connectedAt, isAlive }
     this.rooms = new Map();
     // vaultId -> Array of { type: 'change'|'delete'|'conflict', path, timestamp, userId }
     this.activityLogs = new Map();
+    this.heartbeatInterval = null;
   }
 
   init(httpServer) {
     this.wss = new WebSocketServer({ noServer: true });
+
+    // Setup 30s heartbeat interval to detect stale/dead connections and prevent mobile zombie sockets
+    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+    this.heartbeatInterval = setInterval(() => {
+      for (const [vaultId, room] of this.rooms.entries()) {
+        for (const client of Array.from(room)) {
+          if (client.isAlive === false) {
+            try {
+              client.ws.terminate();
+            } catch {}
+            room.delete(client);
+            continue;
+          }
+          client.isAlive = false;
+          try {
+            client.ws.ping();
+          } catch {
+            room.delete(client);
+          }
+        }
+      }
+    }, 30000);
 
     httpServer.on('upgrade', (req, socket, head) => {
       const { pathname, query } = url.parse(req.url, true);
@@ -107,7 +130,7 @@ class FnsHub {
   _onConnection(ws, user, vaultId, deviceMeta, permission = 'read-write') {
     const deviceId = typeof deviceMeta === 'object' && deviceMeta ? deviceMeta.deviceId : 'device-' + user.id.slice(0, 6);
     const deviceName = typeof deviceMeta === 'object' && deviceMeta ? deviceMeta.deviceName : (deviceMeta || 'Obsidian Client');
-    const client = { ws, userId: user.id, username: user.username, deviceId, deviceName, permission, connectedAt: Date.now() };
+    const client = { ws, userId: user.id, username: user.username, deviceId, deviceName, permission, connectedAt: Date.now(), isAlive: true };
     this._room(vaultId).add(client);
 
     try {
@@ -115,9 +138,16 @@ class FnsHub {
       devicesStore.recordActivity(deviceId, { deviceName });
     } catch {}
 
+    ws.on('pong', () => {
+      client.isAlive = true;
+    });
+
     this._send(ws, { type: 'init', manifest: storage.getManifest(vaultId), permission });
 
-    ws.on('message', (raw) => this._onMessage(client, vaultId, raw));
+    ws.on('message', (raw) => {
+      client.isAlive = true;
+      this._onMessage(client, vaultId, raw);
+    });
     ws.on('close', () => this._room(vaultId).delete(client));
     ws.on('error', () => this._room(vaultId).delete(client));
   }

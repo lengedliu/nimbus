@@ -31,9 +31,16 @@ class JsonDb {
   }
 
   write(data) {
-    const tmp = this.filePath + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-    fs.renameSync(tmp, this.filePath);
+    const tmp = this.filePath + '.tmp.' + Date.now() + '.' + Math.random().toString(36).slice(2, 6);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+      fs.renameSync(tmp, this.filePath);
+    } catch (err) {
+      try {
+        if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+      } catch {}
+      throw err;
+    }
   }
 
   update(fn) {

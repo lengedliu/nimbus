@@ -29,6 +29,8 @@
     manifest: {},
     activeTab: null, // 'vault' | 'users' | 'all-vaults'
     fileFilter: 'all', // 'all' | 'md' | 'media' | 'config'
+    fileViewMode: localStorage.getItem('nimbus_file_view_mode') || 'tree', // 'tree' | 'flat'
+    expandedFolders: new Set(),
     searchQuery: '',
   };
 
@@ -687,11 +689,21 @@
         <span class="search-icon">🔍</span>
         <input type="text" id="file-search-input" placeholder="搜索文件名或全文内容..." value="${escapeHtml(state.searchQuery)}" />
       </div>
-      <div class="filter-pills">
-        <span class="filter-pill ${state.fileFilter === 'all' ? 'active' : ''}" data-filter="all">全部 (${paths.length})</span>
-        <span class="filter-pill ${state.fileFilter === 'md' ? 'active' : ''}" data-filter="md">Markdown</span>
-        <span class="filter-pill ${state.fileFilter === 'media' ? 'active' : ''}" data-filter="media">媒体/附件</span>
-        <span class="filter-pill ${state.fileFilter === 'config' ? 'active' : ''}" data-filter="config">配置 (.obsidian)</span>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="filter-pills">
+          <span class="filter-pill ${state.fileFilter === 'all' ? 'active' : ''}" data-filter="all">全部 (${paths.length})</span>
+          <span class="filter-pill ${state.fileFilter === 'md' ? 'active' : ''}" data-filter="md">Markdown</span>
+          <span class="filter-pill ${state.fileFilter === 'media' ? 'active' : ''}" data-filter="media">媒体/附件</span>
+          <span class="filter-pill ${state.fileFilter === 'config' ? 'active' : ''}" data-filter="config">配置 (.obsidian)</span>
+        </div>
+        <div class="view-mode-group">
+          <button class="view-mode-btn ${state.fileViewMode === 'tree' ? 'active' : ''}" data-mode="tree" title="按库的原始树状目录结构层级显示">
+            <span>🌲</span> 树状目录
+          </button>
+          <button class="view-mode-btn ${state.fileViewMode === 'flat' ? 'active' : ''}" data-mode="flat" title="平铺文件路径列表显示">
+            <span>📋</span> 平铺列表
+          </button>
+        </div>
       </div>
     `;
     container.appendChild(toolbar);
@@ -701,6 +713,16 @@
       pill.onclick = () => {
         state.fileFilter = pill.dataset.filter;
         renderVaultContainer(vaultId);
+      };
+    });
+
+    // View mode switch
+    toolbar.querySelectorAll('.view-mode-btn').forEach((btn) => {
+      btn.onclick = () => {
+        state.fileViewMode = btn.dataset.mode;
+        localStorage.setItem('nimbus_file_view_mode', state.fileViewMode);
+        toolbar.querySelectorAll('.view-mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === state.fileViewMode));
+        renderFileList(vaultId, container);
       };
     });
 
@@ -727,6 +749,63 @@
     container.appendChild(listContainer);
 
     renderFileList(vaultId, listContainer);
+  }
+
+  function buildFileTree(paths, manifest) {
+    const root = { name: '', path: '', type: 'folder', children: {}, fileCount: 0, totalSize: 0 };
+    const allFolderPaths = [];
+
+    for (const p of paths) {
+      const parts = p.split('/');
+      let current = root;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const isFile = i === parts.length - 1;
+        const subPath = parts.slice(0, i + 1).join('/');
+
+        if (isFile) {
+          const meta = manifest[p] || { size: 0, mtime: Date.now() };
+          current.children[part] = {
+            name: part,
+            path: subPath,
+            type: 'file',
+            meta,
+          };
+        } else {
+          if (!current.children[part]) {
+            allFolderPaths.push(subPath);
+            current.children[part] = {
+              name: part,
+              path: subPath,
+              type: 'folder',
+              children: {},
+              fileCount: 0,
+              totalSize: 0,
+            };
+          }
+          current = current.children[part];
+        }
+      }
+    }
+
+    function computeStats(node) {
+      if (node.type === 'file') {
+        return { count: 1, size: node.meta?.size || 0 };
+      }
+      let count = 0;
+      let size = 0;
+      for (const key of Object.keys(node.children)) {
+        const res = computeStats(node.children[key]);
+        count += res.count;
+        size += res.size;
+      }
+      node.fileCount = count;
+      node.totalSize = size;
+      return { count, size };
+    }
+    computeStats(root);
+
+    return { root, allFolderPaths };
   }
 
   async function renderFileList(vaultId, container) {
@@ -765,6 +844,189 @@
       return;
     }
 
+    if (state.fileViewMode === 'tree') {
+      renderTreeFileList(vaultId, listWrapper, paths, state.manifest);
+    } else {
+      renderFlatFileList(vaultId, listWrapper, paths, state.manifest);
+    }
+  }
+
+  function renderTreeFileList(vaultId, listWrapper, paths, manifest) {
+    const { root, allFolderPaths } = buildFileTree(paths, manifest);
+
+    // If first load or empty, default all folders to expanded
+    if (state.expandedFolders.size === 0) {
+      allFolderPaths.forEach((fp) => state.expandedFolders.add(fp));
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'tree-view-wrapper';
+
+    // Tree toolbar bar
+    const bar = document.createElement('div');
+    bar.className = 'tree-toolbar-bar';
+    bar.innerHTML = `
+      <div>
+        <span>📁 <strong>原始目录结构</strong> · 共 ${allFolderPaths.length} 个文件夹 · ${paths.length} 个文件</span>
+      </div>
+      <div class="tree-toolbar-controls">
+        <button class="tree-ctrl-btn" id="tree-expand-all-btn">➕ 全部展开</button>
+        <button class="tree-ctrl-btn" id="tree-collapse-all-btn">➖ 全部折叠</button>
+      </div>
+    `;
+    wrapper.appendChild(bar);
+
+    bar.querySelector('#tree-expand-all-btn').onclick = () => {
+      allFolderPaths.forEach((fp) => state.expandedFolders.add(fp));
+      renderFileList(vaultId, listWrapper);
+    };
+    bar.querySelector('#tree-collapse-all-btn').onclick = () => {
+      state.expandedFolders.clear();
+      renderFileList(vaultId, listWrapper);
+    };
+
+    // Header row
+    const header = document.createElement('div');
+    header.className = 'tree-header-row';
+    header.innerHTML = `
+      <div>名称 / 目录层级</div>
+      <div>大小</div>
+      <div>修改时间</div>
+      <div style="text-align:right">操作</div>
+    `;
+    wrapper.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'tree-body';
+
+    function renderBranch(node, depth) {
+      const keys = Object.keys(node.children).sort((a, b) => {
+        const itemA = node.children[a];
+        const itemB = node.children[b];
+        if (itemA.type !== itemB.type) {
+          return itemA.type === 'folder' ? -1 : 1;
+        }
+        return a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' });
+      });
+
+      for (const key of keys) {
+        const item = node.children[key];
+        if (item.type === 'folder') {
+          const isExpanded = state.expandedFolders.has(item.path);
+          const row = document.createElement('div');
+          row.className = 'tree-node-row folder-row';
+
+          let indentHtml = '';
+          for (let d = 0; d < depth; d++) {
+            indentHtml += '<span class="tree-indent-spacer"></span>';
+          }
+
+          row.innerHTML = `
+            <div class="tree-name-col">
+              ${indentHtml}
+              <span class="tree-toggle-arrow ${isExpanded ? 'open' : ''}">▶</span>
+              <span class="tree-icon">${isExpanded ? '📂' : '📁'}</span>
+              <span class="tree-name-text">${escapeHtml(item.name)}</span>
+              <span class="tree-badge">${item.fileCount} 项</span>
+            </div>
+            <div class="tree-meta-col">${formatBytes(item.totalSize)}</div>
+            <div class="tree-meta-col">-</div>
+            <div class="tree-actions-col"></div>
+          `;
+
+          row.onclick = () => {
+            if (state.expandedFolders.has(item.path)) {
+              state.expandedFolders.delete(item.path);
+            } else {
+              state.expandedFolders.add(item.path);
+            }
+            renderFileList(vaultId, listWrapper);
+          };
+
+          body.appendChild(row);
+
+          if (isExpanded) {
+            renderBranch(item, depth + 1);
+          }
+        } else {
+          // File row
+          const p = item.path;
+          const meta = item.meta;
+          const isMd = p.toLowerCase().endsWith('.md');
+          const isImg = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(p);
+          const icon = isMd ? '📄' : isImg ? '🖼️' : p.startsWith('.obsidian/') ? '⚙️' : '📎';
+
+          const row = document.createElement('div');
+          row.className = 'tree-node-row file-row';
+
+          let indentHtml = '';
+          for (let d = 0; d < depth; d++) {
+            indentHtml += '<span class="tree-indent-spacer"></span>';
+          }
+
+          row.innerHTML = `
+            <div class="tree-name-col">
+              ${indentHtml}
+              <span class="tree-indent-spacer" style="width:18px;"></span>
+              <span class="tree-icon">${icon}</span>
+              <span class="tree-name-text">${escapeHtml(item.name)}</span>
+            </div>
+            <div class="tree-meta-col">${formatBytes(meta.size)}</div>
+            <div class="tree-meta-col">${new Date(meta.mtime).toLocaleString()}</div>
+            <div class="tree-actions-col"></div>
+          `;
+
+          row.onclick = (e) => {
+            if (e.target.closest('button')) return;
+            openFile(vaultId, p);
+          };
+
+          const actionsCol = row.querySelector('.tree-actions-col');
+
+          if (isMd) {
+            const shareBtn = document.createElement('button');
+            shareBtn.className = 'secondary';
+            shareBtn.textContent = '🔗 分享';
+            shareBtn.onclick = (e) => {
+              e.stopPropagation();
+              showCreateShareModal(vaultId, p);
+            };
+            actionsCol.appendChild(shareBtn);
+          }
+
+          const histBtn = document.createElement('button');
+          histBtn.className = 'secondary';
+          histBtn.textContent = '⏱️ 历史';
+          histBtn.onclick = (e) => {
+            e.stopPropagation();
+            showHistoryModal(vaultId, p);
+          };
+          actionsCol.appendChild(histBtn);
+
+          const delBtn = document.createElement('button');
+          delBtn.className = 'danger';
+          delBtn.textContent = '🗑️';
+          delBtn.title = '移至回收站';
+          delBtn.onclick = async (e) => {
+            e.stopPropagation();
+            if (!confirm(`将 "${p}" 移入回收站？可在回收站随时恢复。`)) return;
+            await api(`/api/vaults/${vaultId}/files/${encodeURIComponentPath(p)}`, { method: 'DELETE' });
+            toast('已移至回收站');
+            openVault(vaultId, 'files');
+          };
+          actionsCol.appendChild(delBtn);
+
+          body.appendChild(row);
+        }
+      }
+    }
+
+    renderBranch(root, 0);
+    wrapper.appendChild(body);
+    listWrapper.appendChild(wrapper);
+  }
+
+  function renderFlatFileList(vaultId, listWrapper, paths, manifest) {
     const table = document.createElement('table');
     table.className = 'file-table';
     table.innerHTML = `
@@ -781,7 +1043,7 @@
     const tbody = table.querySelector('tbody');
 
     for (const p of paths) {
-      const meta = state.manifest[p];
+      const meta = manifest[p] || { size: 0, mtime: Date.now() };
       const isMd = p.toLowerCase().endsWith('.md');
       const isImg = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(p);
       const icon = isMd ? '📄' : isImg ? '🖼️' : p.startsWith('.obsidian/') ? '⚙️' : '📎';

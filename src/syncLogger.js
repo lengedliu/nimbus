@@ -35,6 +35,16 @@ function loadFromFile() {
   }
 }
 
+let saveTimeout = null;
+
+function scheduleSaveToFile() {
+  if (saveTimeout) return;
+  saveTimeout = setTimeout(() => {
+    saveTimeout = null;
+    saveToFile();
+  }, 1000);
+}
+
 function saveToFile() {
   try {
     fs.mkdirSync(path.dirname(SYNC_LOGS_FILE), { recursive: true });
@@ -46,7 +56,9 @@ function saveToFile() {
     all.sort((a, b) => b.timestamp - a.timestamp);
     // Keep max 2000 in file
     const sliced = all.slice(0, 2000);
-    fs.writeFileSync(SYNC_LOGS_FILE, JSON.stringify(sliced, null, 2));
+    const tmp = SYNC_LOGS_FILE + '.tmp.' + Date.now();
+    fs.writeFileSync(tmp, JSON.stringify(sliced, null, 2), 'utf8');
+    fs.renameSync(tmp, SYNC_LOGS_FILE);
   } catch (err) {
     console.error('[SyncLog] Failed to write sync_logs.json:', err.message);
   }
@@ -128,7 +140,7 @@ async function recordLog(logData) {
 
   // Persist
   if (dbManager.type === 'json') {
-    saveToFile();
+    scheduleSaveToFile();
   } else {
     try {
       await dbManager.execute(
