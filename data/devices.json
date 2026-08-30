@@ -1,0 +1,26 @@
+[
+  {
+    "id": "40fba64ec317cc47",
+    "userId": "a0f9df37-9f58-4298-997b-ffb51ab82dbd",
+    "deviceName": "测试自动化应用",
+    "platform": "app",
+    "clientIp": "127.0.0.1",
+    "userAgent": "",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMGY5ZGYzNy05ZjU4LTQyOTgtOTk3Yi1mZmI1MWFiODJkYmQiLCJ1c2VybmFtZSI6ImFkbWluIiwiZGV2aWNlSWQiOiI0MGZiYTY0ZWMzMTdjYzQ3IiwiZGV2aWNlTmFtZSI6Iua1i-ivleiHquWKqOWMluW6lOeUqCIsInR5cGUiOiJkZXZpY2UiLCJpYXQiOjE3ODgwOTIwMzUsImV4cCI6MTgxOTYyODAzNX0.TX0dwubmM4vFLykU_CcJ-HWSH42pcbKyPX-4yFz-RG0",
+    "createdAt": 1788092035227,
+    "lastActiveAt": 1788092035228,
+    "status": "revoked"
+  },
+  {
+    "id": "3698d5a6134c5f0a",
+    "userId": "a0f9df37-9f58-4298-997b-ffb51ab82dbd",
+    "deviceName": "Windows PC (默认设备)",
+    "platform": "windows",
+    "clientIp": "54.183.129.48",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMGY5ZGYzNy05ZjU4LTQyOTgtOTk3Yi1mZmI1MWFiODJkYmQiLCJ1c2VybmFtZSI6ImFkbWluIiwiZGV2aWNlSWQiOiIzNjk4ZDVhNjEzNGM1ZjBhIiwiZGV2aWNlTmFtZSI6IldpbmRvd3MgUEMgKOm7mOiupOiuvuWkhykiLCJ0eXBlIjoiZGV2aWNlIiwiaWF0IjoxNzg4MDkxNzY4LCJleHAiOjE4MTk2Mjc3Njh9.6C1tn3IHeTVn_CSUAXsGacJQLgN174uafEFpHEH2cM0",
+    "createdAt": 1788091768566,
+    "lastActiveAt": 1788091768566,
+    "status": "active"
+  }
+]

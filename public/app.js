@@ -4375,6 +4375,7 @@
               <button class="secondary quick-seed-btn" data-name="Windows 台式机" data-plat="windows">🪟 添加 Windows 设备</button>
               <button class="secondary quick-seed-btn" data-name="iPhone" data-plat="ios">🍎 添加 iPhone 设备</button>
               <button class="secondary quick-seed-btn" data-name="Android 手机" data-plat="android">🤖 添加 Android 设备</button>
+              <button class="secondary quick-seed-btn" data-name="应用客户端" data-plat="app">📦 添加应用终端</button>
             </div>
           </div>
         `;
@@ -4406,7 +4407,7 @@
         card.className = `device-card ${dev.isOnline ? 'online' : ''}`;
         
         const platform = (dev.platform || '').toLowerCase();
-        const platformIcon = platform.includes('ios') ? '🍎' : platform.includes('android') ? '🤖' : platform.includes('win') ? '🪟' : platform.includes('mac') ? '🍏' : platform.includes('linux') ? '🐧' : '💻';
+        const platformIcon = platform.includes('ios') ? '🍎' : platform.includes('android') ? '🤖' : platform.includes('win') ? '🪟' : platform.includes('mac') ? '🍏' : platform.includes('linux') ? '🐧' : (platform.includes('app') || platform.includes('应用')) ? '📦' : '💻';
         const lastActiveText = dev.lastActiveAt ? new Date(dev.lastActiveAt).toLocaleString() : '刚刚活跃';
         const devName = dev.name || dev.deviceName || dev.deviceId || 'Obsidian Client';
 
@@ -4507,7 +4508,7 @@
     };
 
     const platform = (device.platform || '').toLowerCase();
-    const platformIcon = platform.includes('ios') ? '🍎' : platform.includes('android') ? '🤖' : platform.includes('win') ? '🪟' : platform.includes('mac') ? '🍏' : platform.includes('linux') ? '🐧' : '💻';
+    const platformIcon = platform.includes('ios') ? '🍎' : platform.includes('android') ? '🤖' : platform.includes('win') ? '🪟' : platform.includes('mac') ? '🍏' : platform.includes('linux') ? '🐧' : (platform.includes('app') || platform.includes('应用')) ? '📦' : '💻';
 
     const html = `
       <div class="modal-header">
@@ -4548,7 +4549,8 @@
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-top:14px;font-size:12px;color:var(--muted);line-height:1.6;">
           <b>📱 移动端与客户端配置提示：</b><br/>
           • <b>桌面端</b>：复制上方 JSON 配置文件，保存至对应笔记库的 <code>.obsidian/plugins/nimbus/data.json</code> 文件中重启插件即可。<br/>
-          • <b>手机/平板 (iOS / Android)</b>：在 Obsidian 设置中的 Nimbus 插件界面填入 <b>Server URL</b> (<code>${escapeHtml(serverUrl)}</code>)、<b>Vault ID</b> (<code>${escapeHtml(vaultId)}</code>) 与上方 <b>Token</b>。
+          • <b>手机/平板 (iOS / Android)</b>：在 Obsidian 设置中的 Nimbus 插件界面填入 <b>Server URL</b> (<code>${escapeHtml(serverUrl)}</code>)、<b>Vault ID</b> (<code>${escapeHtml(vaultId)}</code>) 与上方 <b>Token</b>。<br/>
+          • <b>应用终端 (App / 扩展)</b>：可直接将专属 Token 填入第三方应用、客户端或脚本的 Bearer 鉴权中。
         </div>
       </div>
       <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
@@ -4600,7 +4602,7 @@
       </div>
       <div class="modal-body">
         <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
-          为每个终端（例如办公室电脑、个人笔记本、手机）分配独立的连接令牌，可随时单独撤销或审计活动状态。
+          为每个终端（例如办公室电脑、个人笔记本、手机、第三方应用）分配独立的连接令牌，可随时单独撤销或审计活动状态。
         </p>
 
         <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
@@ -4610,11 +4612,12 @@
           <button class="secondary preset-btn" data-name="iPhone 15" data-plat="ios" style="padding:2px 8px;font-size:11.5px;">🍎 iPhone</button>
           <button class="secondary preset-btn" data-name="Android 手机" data-plat="android" style="padding:2px 8px;font-size:11.5px;">🤖 Android</button>
           <button class="secondary preset-btn" data-name="Linux 工作站" data-plat="linux" style="padding:2px 8px;font-size:11.5px;">🐧 Linux</button>
+          <button class="secondary preset-btn" data-name="应用客户端" data-plat="app" style="padding:2px 8px;font-size:11.5px;">📦 应用</button>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:12px;">
-          <label>设备名称 / 备注 (例如: MacBook Pro M3, 办公台式机, iPhone 15)
-            <input type="text" id="nd-name" placeholder="请输入设备名称" />
+          <label>设备名称 / 备注 (例如: MacBook Pro M3, 办公台式机, iPhone 15, 同步应用)
+            <input type="text" id="nd-name" placeholder="请输入设备或应用名称" />
           </label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <label>终端平台类型
@@ -4624,6 +4627,7 @@
                 <option value="linux">🐧 Linux</option>
                 <option value="ios">🍎 iOS (iPhone / iPad)</option>
                 <option value="android">🤖 Android</option>
+                <option value="app">📦 应用</option>
               </select>
             </label>
             <label>令牌有效期
@@ -6283,7 +6287,6 @@
               isAdmin
                 ? `
               <button class="btn-primary" id="sp-add-record-btn" style="font-size:12px;padding:5px 10px;">➕ 录入赞助</button>
-              <button class="secondary" id="sp-edit-config-btn" style="font-size:12px;padding:5px 10px;">⚙️ 配置收款</button>
             `
                 : ''
             }
@@ -6349,8 +6352,8 @@
               <div class="wechat-qr-wrapper">
                 <div class="wechat-qr-frame">
                   ${
-                    config.wechatQrUrl
-                      ? `<img src="${escapeHtml(config.wechatQrUrl)}" alt="微信赞赏码" class="wechat-qr-img" />`
+                    (config.wechatQrUrl || '/wechat-reward.jpg')
+                      ? `<img src="${escapeHtml(config.wechatQrUrl || '/wechat-reward.jpg')}" alt="微信赞赏码" class="wechat-qr-img" onerror="this.onerror=null;this.src='/wechat-reward.jpg';" />`
                       : `
                     <!-- Default Stylized QR Graphic -->
                     <div class="wechat-qr-graphic">
@@ -6699,6 +6702,8 @@
   }
 
   function openEditSponsorConfigModal(cfg) {
+    let currentQr = cfg.wechatQrUrl || '';
+
     showModal(`
       <div class="modal-header">
         <h3>⚙️ 配置赞助方式与收款信息</h3>
@@ -6710,27 +6715,157 @@
             <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">顶部说明副标题</label>
             <textarea id="sp-cfg-desc" rows="2" style="width:100%;font-size:12px;">${escapeHtml(cfg.descriptionText || '')}</textarea>
           </div>
-          <div class="form-group" style="margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:14px;">
             <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Ko-fi 赞助主页链接 (可留空)</label>
             <input type="text" id="sp-cfg-kofi-url" value="${escapeHtml(cfg.kofiUrl || '')}" placeholder="如 https://ko-fi.com/username (留空则仅展示徽标)" style="width:100%;font-size:12px;" />
           </div>
-          <div class="form-group" style="margin-bottom:12px;">
-            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">微信赞赏码图片 URL 或 Base64 (留空使用默认精致矢量图)</label>
-            <input type="text" id="sp-cfg-wechat-qr" value="${escapeHtml(cfg.wechatQrUrl || '')}" placeholder="https://... 或 data:image/..." style="width:100%;font-size:12px;" />
+
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">微信赞赏码 / 收款码图片</label>
+            
+            <!-- Upload & Preview Box -->
+            <div style="display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:start;background:var(--panel-2);border:1px dashed var(--border);border-radius:8px;padding:12px;">
+              <!-- Live Thumbnail Preview -->
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                <div id="sp-modal-qr-preview-box" style="width:100px;height:100px;background:#fff;border:2px solid #22c55e;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 2px 8px rgba(34,197,94,0.15);">
+                  ${
+                    currentQr
+                      ? `<img id="sp-modal-qr-img" src="${escapeHtml(currentQr)}" alt="微信赞赏码" style="width:100%;height:100%;object-fit:contain;" />`
+                      : `<div id="sp-modal-qr-placeholder" style="font-size:11px;color:#999;text-align:center;padding:4px;">默认矢量图</div>`
+                  }
+                </div>
+                <button type="button" class="secondary" id="sp-modal-clear-qr-btn" style="font-size:11px;padding:2px 8px;width:100%;">还原默认</button>
+              </div>
+
+              <!-- Upload actions -->
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <label class="btn-primary" style="font-size:12px;padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                    <span>📁 选择收款码图片</span>
+                    <input type="file" id="sp-cfg-wechat-file" accept="image/*" style="display:none;" />
+                  </label>
+                  <span style="font-size:11px;color:var(--muted);">支持点击上传、直接拖拽或粘贴图片</span>
+                </div>
+                <div style="margin-top:2px;">
+                  <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px;">或直接填入图片链接 / Base64 数据：</label>
+                  <textarea id="sp-cfg-wechat-qr" rows="2" placeholder="https://... 或 data:image/..." style="width:100%;font-size:11px;font-family:monospace;">${escapeHtml(currentQr)}</textarea>
+                </div>
+              </div>
+            </div>
           </div>
-          <div style="display:flex;justify-content:flex-end;gap:8px;">
+
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
             <button type="button" class="secondary modal-close">取消</button>
-            <button type="submit" class="btn-primary">保存配置</button>
+            <button type="submit" class="btn-primary" id="sp-cfg-save-btn">保存配置</button>
           </div>
         </form>
       </div>
     `, (modal) => {
+      const fileInput = modal.querySelector('#sp-cfg-wechat-file');
+      const textInput = modal.querySelector('#sp-cfg-wechat-qr');
+      const previewBox = modal.querySelector('#sp-modal-qr-preview-box');
+      const clearBtn = modal.querySelector('#sp-modal-clear-qr-btn');
+
+      function updatePreview(dataUri) {
+        currentQr = dataUri || '';
+        textInput.value = currentQr;
+        if (currentQr) {
+          previewBox.innerHTML = `<img id="sp-modal-qr-img" src="${escapeHtml(currentQr)}" alt="微信赞赏码" style="width:100%;height:100%;object-fit:contain;" />`;
+        } else {
+          previewBox.innerHTML = `<div id="sp-modal-qr-placeholder" style="font-size:11px;color:#999;text-align:center;padding:4px;">默认矢量图</div>`;
+        }
+      }
+
+      function processImageFile(file) {
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const rawData = e.target.result;
+          // Optimize size using canvas
+          const img = new Image();
+          img.onload = () => {
+            const maxDim = 800;
+            let w = img.width;
+            let h = img.height;
+            if (w > maxDim || h > maxDim) {
+              if (w > h) {
+                h = Math.round((h * maxDim) / w);
+                w = maxDim;
+              } else {
+                w = Math.round((w * maxDim) / h);
+                h = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const optimized = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9);
+            updatePreview(optimized);
+          };
+          img.src = rawData;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+          if (e.target.files && e.target.files[0]) {
+            processImageFile(e.target.files[0]);
+          }
+        });
+      }
+
+      if (textInput) {
+        textInput.addEventListener('input', (e) => {
+          updatePreview(e.target.value.trim());
+        });
+      }
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          updatePreview('');
+        });
+      }
+
+      // Drag and drop into modal
+      modal.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      modal.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          processImageFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      // Paste image from clipboard
+      modal.addEventListener('paste', (e) => {
+        if (e.clipboardData && e.clipboardData.items) {
+          for (let i = 0; i < e.clipboardData.items.length; i++) {
+            const item = e.clipboardData.items[i];
+            if (item.type.indexOf('image') !== -1) {
+              const file = item.getAsFile();
+              processImageFile(file);
+              break;
+            }
+          }
+        }
+      });
+
       modal.querySelector('#edit-sponsor-config-form').onsubmit = async () => {
         const payload = {
           descriptionText: modal.querySelector('#sp-cfg-desc').value.trim(),
           kofiUrl: modal.querySelector('#sp-cfg-kofi-url').value.trim(),
-          wechatQrUrl: modal.querySelector('#sp-cfg-wechat-qr').value.trim(),
+          wechatQrUrl: currentQr.trim(),
         };
+
+        const saveBtn = modal.querySelector('#sp-cfg-save-btn');
+        if (saveBtn) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = '正在保存…';
+        }
 
         try {
           const res = await api('/api/sponsors/config', {
@@ -6743,9 +6878,19 @@
             toast('赞助配置已更新！');
             closeModal();
             renderSponsorPanel();
+          } else {
+            toast('保存失败: ' + (body.error || '未知错误'));
+            if (saveBtn) {
+              saveBtn.disabled = false;
+              saveBtn.textContent = '保存配置';
+            }
           }
         } catch (err) {
           toast('保存失败: ' + err.message);
+          if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '保存配置';
+          }
         }
       };
     });

@@ -35,7 +35,7 @@ router.get('/', (req, res) => {
   // If user has no devices yet, auto-provision their current initial device
   if (list.length === 0) {
     const platform = detectPlatform(userAgent);
-    const platformName = platform === 'macos' ? 'MacBook / macOS' : platform === 'windows' ? 'Windows PC' : platform === 'ios' ? 'iPhone' : platform === 'android' ? 'Android Device' : platform === 'linux' ? 'Linux Workstation' : '主工作台终端';
+    const platformName = platform === 'macos' ? 'MacBook / macOS' : platform === 'windows' ? 'Windows PC' : platform === 'ios' ? 'iPhone' : platform === 'android' ? 'Android Device' : platform === 'linux' ? 'Linux Workstation' : (platform === 'app' || platform === '应用') ? '应用客户端 (App)' : '主工作台终端';
     const initialDev = devicesStore.generateDeviceToken(req.user, `${platformName} (默认设备)`, platform);
     devicesStore.recordActivity(initialDev.id, { clientIp, userAgent, deviceName: initialDev.deviceName });
     list = isAdmin && all === 'true' ? devicesStore.listAll() : devicesStore.listForUser(req.user.id);

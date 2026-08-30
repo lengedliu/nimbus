@@ -164,7 +164,7 @@ const INITIAL_SPONSORS = [
 const DEFAULT_CONFIG = {
   kofiUrl: '', // 留空则前端渲染为不可点击或提示状态
   kofiLabel: '请作者喝杯咖啡',
-  wechatQrUrl: '', // base64 or URL
+  wechatQrUrl: '/wechat-reward.jpg', // base64 or URL
   wechatLabel: '微信打赏支持',
   alipayQrUrl: '',
   descriptionText: '如果这个项目帮助到您，并且想要它继续开发，请在以下方式支持我们，感谢您对开源软件的支持！',
