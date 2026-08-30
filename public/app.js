@@ -146,6 +146,123 @@
     setTimeout(() => el.remove(), 2600);
   }
 
+  /**
+   * Universal Centered Confirmation Modal Dialog
+   * @param {string|object} options
+   * @returns {Promise<boolean>}
+   */
+  function showConfirm(options) {
+    return new Promise((resolve) => {
+      let title = '操作确认';
+      let message = '确定要执行此操作吗？';
+      let confirmText = '确定';
+      let cancelText = '取消';
+      let type = 'danger'; // 'danger' | 'warning' | 'primary'
+      let icon = '⚠️';
+
+      if (typeof options === 'string') {
+        message = options;
+        if (options.includes('退出') || options.includes('注销登录')) {
+          icon = '🚪';
+          title = '退出登录确认';
+          confirmText = '确认退出';
+          type = 'danger';
+        } else if (options.includes('回收站')) {
+          icon = '🗑️';
+          title = '移入回收站确认';
+          confirmText = '移至回收站';
+          type = 'danger';
+        } else if (options.includes('令牌') || options.includes('Token')) {
+          icon = '🔑';
+          title = '注销令牌确认';
+          confirmText = '确认注销';
+          type = 'danger';
+        } else if (options.includes('数据库') || options.includes('迁移') || options.includes('存储引擎')) {
+          icon = '🔄';
+          title = '切换存储引擎确认';
+          confirmText = '确认切换';
+          type = 'warning';
+        } else if (options.includes('删除') || options.includes('废除') || options.includes('清空') || options.includes('丢弃') || options.includes('撤销')) {
+          icon = '🗑️';
+          title = '操作确认';
+          confirmText = '确认执行';
+          type = 'danger';
+        } else if (options.includes('回滚') || options.includes('恢复')) {
+          icon = '⏱️';
+          title = '版本回滚确认';
+          confirmText = '确认回滚';
+          type = 'warning';
+        }
+      } else if (options && typeof options === 'object') {
+        if (options.title) title = options.title;
+        if (options.message) message = options.message;
+        if (options.confirmText) confirmText = options.confirmText;
+        if (options.cancelText) cancelText = options.cancelText;
+        if (options.type) type = options.type;
+        if (options.icon) icon = options.icon;
+      }
+
+      const backdrop = document.createElement('div');
+      backdrop.className = 'confirm-dialog-backdrop';
+      backdrop.innerHTML = `
+        <div class="confirm-dialog-card" role="dialog" aria-modal="true">
+          <div class="confirm-dialog-header">
+            <div class="confirm-dialog-icon ${type}">${icon}</div>
+            <div class="confirm-dialog-title-wrap">
+              <h4 class="confirm-dialog-title">${escapeHtml(title)}</h4>
+              <div class="confirm-dialog-msg">${typeof message === 'string' ? escapeHtml(message).replace(/\n/g, '<br>') : message}</div>
+            </div>
+          </div>
+          <div class="confirm-dialog-footer">
+            <button type="button" class="btn-cancel secondary" style="min-width:70px;">${escapeHtml(cancelText)}</button>
+            <button type="button" class="btn-confirm ${type === 'danger' ? 'danger' : type === 'warning' ? 'btn-primary' : 'btn-primary'}" style="${type === 'warning' ? 'background:#d29922;border-color:#bb8009;' : ''} min-width:85px;">${escapeHtml(confirmText)}</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(backdrop);
+
+      let closed = false;
+      const cleanup = (result) => {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener('keydown', keyHandler);
+        backdrop.style.opacity = '0';
+        backdrop.style.transition = 'opacity 0.12s ease';
+        setTimeout(() => backdrop.remove(), 130);
+        resolve(result);
+      };
+
+      const keyHandler = (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup(false);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          cleanup(true);
+        }
+      };
+      document.addEventListener('keydown', keyHandler);
+
+      backdrop.querySelector('.btn-cancel').onclick = (e) => {
+        e.stopPropagation();
+        cleanup(false);
+      };
+      backdrop.querySelector('.btn-confirm').onclick = (e) => {
+        e.stopPropagation();
+        cleanup(true);
+      };
+      backdrop.onclick = (e) => {
+        if (e.target === backdrop) cleanup(false);
+      };
+
+      setTimeout(() => {
+        const btn = backdrop.querySelector('.btn-confirm');
+        if (btn) btn.focus();
+      }, 40);
+    });
+  }
+
   function showModal(contentHtml, onMount) {
     modalContainer.innerHTML = contentHtml;
     modalBackdrop.classList.remove('hidden');
@@ -262,7 +379,16 @@
     }
   });
 
-  $('#logout-btn').addEventListener('click', () => {
+  $('#logout-btn').addEventListener('click', async () => {
+    const ok = await showConfirm({
+      title: '退出登录确认',
+      message: `确定要退出登录当前账号「${state.user?.username || '当前用户'}」吗？退出后需重新输入密码登录。`,
+      confirmText: '退出登录',
+      cancelText: '取消',
+      type: 'danger',
+      icon: '🚪',
+    });
+    if (!ok) return;
     localStorage.removeItem('nimbus_token');
     localStorage.removeItem('nimbus_user');
     state.token = '';
@@ -343,7 +469,14 @@
         del.title = '删除 vault';
         del.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm(`确定删除 vault "${v.name}"？服务器上的笔记数据不会自动清除，只是取消关联。`)) return;
+          const ok = await showConfirm({
+            title: '删除 Vault 笔记库',
+            message: `确定删除 Vault「${v.name}」？服务器上的笔记数据不会自动清除，仅在当前账户中取消关联。`,
+            confirmText: '确认删除',
+            type: 'danger',
+            icon: '🗑️',
+          });
+          if (!ok) return;
           await api(`/api/vaults/${v.id}`, { method: 'DELETE' });
           if (state.activeVaultId === v.id) {
             state.activeVaultId = null;
@@ -1410,7 +1543,14 @@
           delBtn.title = '移至回收站';
           delBtn.onclick = async (e) => {
             e.stopPropagation();
-            if (!confirm(`将 "${p}" 移入回收站？可在回收站随时恢复。`)) return;
+            const ok = await showConfirm({
+              title: '移入回收站确认',
+              message: `确定要将笔记「${p}」移入回收站吗？可在回收站中随时恢复。`,
+              confirmText: '移至回收站',
+              type: 'danger',
+              icon: '🗑️',
+            });
+            if (!ok) return;
             await api(`/api/vaults/${vaultId}/files/${encodeURIComponentPath(p)}`, { method: 'DELETE' });
             toast('已移至回收站');
             openVault(vaultId, 'files');
@@ -1522,7 +1662,14 @@
       delBtn.title = '移至回收站';
       delBtn.onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm(`将 "${p}" 移入回收站？可在回收站随时恢复。`)) return;
+        const ok = await showConfirm({
+          title: '移入回收站确认',
+          message: `确定要将笔记「${p}」移入回收站吗？可在回收站中随时恢复。`,
+          confirmText: '移至回收站',
+          type: 'danger',
+          icon: '🗑️',
+        });
+        if (!ok) return;
         await api(`/api/vaults/${vaultId}/files/${encodeURIComponentPath(p)}`, { method: 'DELETE' });
         toast('已移至回收站');
         openVault(vaultId, 'files');
@@ -1756,7 +1903,14 @@
       };
 
       tr.querySelector(`#del-share-${s.id}`).onclick = async () => {
-        if (!confirm(`确定撤销针对 "${s.title}" 的分享？链接将立即失效。`)) return;
+        const ok = await showConfirm({
+          title: '撤销公开分享',
+          message: `确定撤销针对「${s.title}」的公开分享吗？撤销后该分享链接将立即失效。`,
+          confirmText: '撤销分享',
+          type: 'danger',
+          icon: '🔗',
+        });
+        if (!ok) return;
         await api(`/api/vaults/${vaultId}/shares/${s.id}`, { method: 'DELETE' });
         toast('分享已撤销');
         renderSharesSubtab(vaultId, container);
@@ -2039,7 +2193,14 @@
           btn.onclick = async () => {
             const targetUserId = btn.dataset.userId;
             const targetUsername = btn.dataset.username;
-            if (!confirm(`确定撤销用户 "${targetUsername}" 对该笔记库的访问权限？`)) return;
+            const ok = await showConfirm({
+              title: '撤销成员访问权限',
+              message: `确定撤销用户「${targetUsername}」对该笔记库的访问权限吗？`,
+              confirmText: '撤销权限',
+              type: 'danger',
+              icon: '👤',
+            });
+            if (!ok) return;
             try {
               await api(`/api/vaults/${vaultId}/permissions/${targetUserId}`, {
                 method: 'DELETE',
@@ -2119,7 +2280,14 @@
 
     if (trash.length > 0) {
       container.querySelector('#purge-all-trash-btn').onclick = async () => {
-        if (!confirm('确定彻底清空回收站中的所有文件？此操作无法撤销。')) return;
+        const ok = await showConfirm({
+          title: '清空回收站确认',
+          message: `确定彻底清空回收站中的所有文件（共 ${trash.length} 个）吗？此操作无法撤销。`,
+          confirmText: '彻底清空',
+          type: 'danger',
+          icon: '🗑️',
+        });
+        if (!ok) return;
         await api(`/api/vaults/${vaultId}/trash/purge-all`, { method: 'POST' });
         toast('回收站已清空');
         renderTrashSubtab(vaultId, container);
@@ -2177,7 +2345,14 @@
       };
 
       tr.querySelector(`#purge-trash-${t.id}`).onclick = async () => {
-        if (!confirm(`彻底删除 "${t.path}"？`)) return;
+        const ok = await showConfirm({
+          title: '彻底删除文件确认',
+          message: `确定彻底删除回收站中的「${t.path}」吗？此操作无法撤销。`,
+          confirmText: '彻底删除',
+          type: 'danger',
+          icon: '🗑️',
+        });
+        if (!ok) return;
         await api(`/api/vaults/${vaultId}/trash/${t.id}`, { method: 'DELETE' });
         renderTrashSubtab(vaultId, container);
       };
@@ -2252,7 +2427,14 @@
         `;
 
         card.querySelector('.delete-conflict-btn').onclick = async () => {
-          if (!confirm(`确定直接丢弃冲突副本 "${item.conflictPath}"？`)) return;
+          const ok = await showConfirm({
+            title: '丢弃冲突副本',
+            message: `确定直接丢弃冲突副本「${item.conflictPath}」吗？`,
+            confirmText: '丢弃副本',
+            type: 'danger',
+            icon: '⚔️',
+          });
+          if (!ok) return;
           try {
             await api(`/api/vaults/${vaultId}/conflicts/resolve`, {
               method: 'POST',
@@ -2513,7 +2695,14 @@
         };
 
         tr.querySelector('.del-backup-btn').onclick = async () => {
-          if (!confirm(`确定删除快照备份 "${b.filename}"？`)) return;
+          const ok = await showConfirm({
+            title: '删除快照备份',
+            message: `确定删除快照备份文件「${b.filename}」吗？删除后不可恢复。`,
+            confirmText: '确认删除',
+            type: 'danger',
+            icon: '📦',
+          });
+          if (!ok) return;
           try {
             await api(`/api/vaults/${vaultId}/backups/${b.id}`, { method: 'DELETE' });
             toast('快照备份已删除');
@@ -3031,7 +3220,14 @@
       const clearBtn = container.querySelector('#sync-logs-clear-btn');
       if (clearBtn) {
         clearBtn.onclick = async () => {
-          if (!confirm('确定清空当前 Vault 的所有同步日志记录？此操作不会影响任何笔记内容。')) return;
+          const ok = await showConfirm({
+            title: '清空同步日志',
+            message: '确定清空当前 Vault 的所有同步日志记录吗？此操作不会影响任何笔记内容。',
+            confirmText: '清空日志',
+            type: 'danger',
+            icon: '📋',
+          });
+          if (!ok) return;
           await api(`/api/vaults/${vaultId}/sync-logs`, { method: 'DELETE' });
           toast('同步日志已清空');
           loadLogs();
@@ -3546,7 +3742,14 @@
         };
 
         row.querySelector(`#restore-ver-${ver.id}`).onclick = async () => {
-          if (!confirm(`确定将 "${filePath}" 回滚到 ${new Date(ver.savedAt).toLocaleString()} 的版本？当前版本会自动存入历史。`)) return;
+          const ok = await showConfirm({
+            title: '历史版本回滚确认',
+            message: `确定将「${filePath}」回滚到 ${new Date(ver.savedAt).toLocaleString()} 的快照版本吗？当前版本会自动存入历史。`,
+            confirmText: '确认回滚',
+            type: 'warning',
+            icon: '⏱️',
+          });
+          if (!ok) return;
           await api(`/api/vaults/${vaultId}/history/${ver.id}/restore`, { method: 'POST' });
           toast('已回滚至历史版本');
           closeModal();
@@ -3835,7 +4038,14 @@
         del.className = 'danger';
         del.style.cssText = 'font-size:12px;padding:4px 10px;margin-left:6px;';
         del.onclick = async () => {
-          if (!confirm(`确定删除用户 "${u.username}"？`)) return;
+          const ok = await showConfirm({
+            title: '删除用户确认',
+            message: `确定删除用户「${u.username}」吗？该用户的专属配置与关联关系将被同步清理。`,
+            confirmText: '确认删除',
+            type: 'danger',
+            icon: '👤',
+          });
+          if (!ok) return;
           await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
           renderUsersPanel();
         };
@@ -4514,7 +4724,14 @@
         });
 
         card.querySelector('.revoke-dev-btn')?.addEventListener('click', async () => {
-          if (!confirm(`确定撤销设备 "${devName}" 的访问授权？该设备将被立即踢下线并停止同步。`)) return;
+          const ok = await showConfirm({
+            title: '撤销设备访问授权',
+            message: `确定撤销设备「${devName}」的访问授权吗？该设备将被立即踢下线并停止同步。`,
+            confirmText: '撤销授权',
+            type: 'danger',
+            icon: '💻',
+          });
+          if (!ok) return;
           try {
             await api(`/api/devices/${dev.id || dev.deviceId}`, { method: 'DELETE' });
             toast('设备授权已撤销');
@@ -5715,9 +5932,14 @@
           const doMigrate = $('#db-migrate-data-checkbox')?.checked;
 
           const engineDisplayName = engineNames[targetCfg.type] || targetCfg.type.toUpperCase();
-          if (!confirm(`确定要将数据库存储引擎切换为「${engineDisplayName}」吗？\n\n${doMigrate ? '✓ 已开启全量数据自动迁移，系统将平滑搬移现有用户与笔记配置。' : '⚠️ 未开启数据迁移，新数据库将从空白状态启动。'}`)) {
-            return;
-          }
+          const ok = await showConfirm({
+            title: '切换数据库存储引擎',
+            message: `确定要将数据库存储引擎切换为「${engineDisplayName}」吗？\n\n${doMigrate ? '✓ 已开启全量数据自动迁移，系统将平滑搬移现有用户与笔记配置。' : '⚠️ 未开启数据迁移，新数据库将从空白状态启动。'}`,
+            confirmText: '确认切换',
+            type: 'warning',
+            icon: '🔄',
+          });
+          if (!ok) return;
 
           const fb = $('#db-action-feedback');
           fb.innerHTML = '<span style="color:var(--accent);font-size:13px;">正在执行数据库切换与数据平滑迁移，请稍候…</span>';
@@ -5827,7 +6049,14 @@
       });
 
       $('#purge-all-trash-btn')?.addEventListener('click', async () => {
-        if (!confirm(`确定要清空 Vault "${currentVault.name}" 的所有回收站文件吗？此操作无法撤回。`)) return;
+        const ok = await showConfirm({
+          title: '清空回收站确认',
+          message: `确定要清空 Vault「${currentVault.name}」的所有回收站文件吗？此操作无法撤销。`,
+          confirmText: '清空回收站',
+          type: 'danger',
+          icon: '🗑️',
+        });
+        if (!ok) return;
         try {
           const res = await api(`/api/vaults/${currentVault.id}/trash/purge-all`, { method: 'POST' });
           const body = await res.json();
@@ -6259,7 +6488,14 @@
             const tid = btn.dataset.tokenid;
             const targetToken = tokensList.find((t) => t.id === tid);
             const label = targetToken?.label || '该设备';
-            if (!confirm(`确定要注销并废除「${label}」的专属令牌吗？注销后该设备将无法继续同步。`)) return;
+            const ok = await showConfirm({
+              title: '注销设备专属令牌',
+              message: `确定要注销并废除「${label}」的专属令牌吗？注销后该设备将无法继续同步。`,
+              confirmText: '确认注销',
+              type: 'danger',
+              icon: '🔑',
+            });
+            if (!ok) return;
             try {
               const res = await api(`/api/settings/tokens/${tid}`, { method: 'DELETE' });
               const body = await res.json();
@@ -6868,7 +7104,14 @@
         btn.onclick = async (e) => {
           e.stopPropagation();
           const id = btn.dataset.delId;
-          if (!confirm('确定删除该条赞助记录吗？')) return;
+          const ok = await showConfirm({
+            title: '删除赞助记录',
+            message: '确定删除该条赞助记录吗？删除后将不再统计于赞助名单中。',
+            confirmText: '确认删除',
+            type: 'danger',
+            icon: '🗑️',
+          });
+          if (!ok) return;
           try {
             const r = await api(`/api/sponsors/record/${id}`, { method: 'DELETE' });
             const resData = await r.json();
