@@ -170,18 +170,54 @@ router.post('/database/switch', async (req, res) => {
 });
 
 // --------------------------- Device / API Tokens ---------------------------
+const jwt = require('jsonwebtoken');
+
+function parseTokenInfo(token, createdAt) {
+  let expiresAt = null;
+  let durationText = '1 年 (365 天)';
+  let isExpired = false;
+  if (token) {
+    try {
+      const decoded = jwt.decode(token);
+      if (decoded && decoded.exp) {
+        expiresAt = decoded.exp * 1000;
+        isExpired = Date.now() > expiresAt;
+        const totalSecs = decoded.iat ? decoded.exp - decoded.iat : Math.round((expiresAt - (createdAt || Date.now())) / 1000);
+        const days = Math.round(totalSecs / 86400);
+        if (days >= 3600) {
+          durationText = '永久有效 (10 年)';
+        } else if (days >= 350) {
+          durationText = '1 年 (365 天)';
+        } else if (days >= 80 && days <= 100) {
+          durationText = '90 天';
+        } else if (days >= 25 && days <= 35) {
+          durationText = '30 天';
+        } else {
+          durationText = `${days} 天`;
+        }
+      }
+    } catch (e) {}
+  }
+  return { expiresAt, durationText, isExpired };
+}
 
 router.get('/tokens', (req, res) => {
   const devicesStore = require('../devices');
   const devs = devicesStore.listForUser(req.user.id);
-  const tokens = devs.map((d) => ({
-    id: d.id,
-    label: d.deviceName || d.label || 'Obsidian Client',
-    token: d.token,
-    createdAt: d.createdAt,
-    lastUsedAt: d.lastActiveAt,
-    maskedToken: d.token ? `${d.token.slice(0, 10)}...${d.token.slice(-6)}` : '',
-  }));
+  const tokens = devs.map((d) => {
+    const { expiresAt, durationText, isExpired } = parseTokenInfo(d.token, d.createdAt);
+    return {
+      id: d.id,
+      label: d.deviceName || d.label || 'Obsidian Client',
+      token: d.token,
+      createdAt: d.createdAt,
+      lastUsedAt: d.lastActiveAt,
+      expiresAt,
+      durationText,
+      isExpired,
+      maskedToken: d.token ? `${d.token.slice(0, 10)}...${d.token.slice(-6)}` : '',
+    };
+  });
   res.json({ tokens });
 });
 
@@ -199,6 +235,8 @@ router.post('/tokens', (req, res) => {
     expiresInDays ? parseInt(expiresInDays, 10) : 365
   );
 
+  const { expiresAt, durationText, isExpired } = parseTokenInfo(record.token, record.createdAt);
+
   res.json({
     ok: true,
     token: {
@@ -206,8 +244,79 @@ router.post('/tokens', (req, res) => {
       label: record.deviceName,
       token: record.token,
       createdAt: record.createdAt,
+      lastUsedAt: record.lastActiveAt,
+      expiresAt,
+      durationText,
+      isExpired,
+      maskedToken: record.token ? `${record.token.slice(0, 10)}...${record.token.slice(-6)}` : '',
     },
     message: '设备令牌创建成功',
+  });
+});
+
+router.post('/tokens/:tokenId/regenerate', (req, res) => {
+  const { expiresInDays } = req.body || {};
+  const devicesStore = require('../devices');
+  const record = devicesStore.regenerateDeviceToken(
+    req.params.tokenId,
+    req.user,
+    expiresInDays ? parseInt(expiresInDays, 10) : 365,
+    req.user.role === 'admin'
+  );
+
+  if (!record) {
+    return res.status(404).json({ error: '令牌未找到或无权操作' });
+  }
+
+  const { expiresAt, durationText, isExpired } = parseTokenInfo(record.token, record.createdAt);
+
+  res.json({
+    ok: true,
+    token: {
+      id: record.id,
+      label: record.deviceName,
+      token: record.token,
+      createdAt: record.createdAt,
+      lastUsedAt: record.lastActiveAt,
+      expiresAt,
+      durationText,
+      isExpired,
+      maskedToken: record.token ? `${record.token.slice(0, 10)}...${record.token.slice(-6)}` : '',
+    },
+    message: '令牌已重新生成',
+  });
+});
+
+router.post('/tokens/:tokenId/extend', (req, res) => {
+  const { extendDays } = req.body || {};
+  const devicesStore = require('../devices');
+  const record = devicesStore.extendDeviceToken(
+    req.params.tokenId,
+    req.user,
+    extendDays ? parseInt(extendDays, 10) : 365,
+    req.user.role === 'admin'
+  );
+
+  if (!record) {
+    return res.status(404).json({ error: '令牌未找到或无权操作' });
+  }
+
+  const { expiresAt, durationText, isExpired } = parseTokenInfo(record.token, record.createdAt);
+
+  res.json({
+    ok: true,
+    token: {
+      id: record.id,
+      label: record.deviceName,
+      token: record.token,
+      createdAt: record.createdAt,
+      lastUsedAt: record.lastActiveAt,
+      expiresAt,
+      durationText,
+      isExpired,
+      maskedToken: record.token ? `${record.token.slice(0, 10)}...${record.token.slice(-6)}` : '',
+    },
+    message: '令牌有效期已成功延长',
   });
 });
 

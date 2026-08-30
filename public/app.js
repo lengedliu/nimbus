@@ -5838,12 +5838,54 @@
       });
     } else if (subTab === 'tokens') {
       // 4. Device Tokens management tab
+      function getTokenExpiryInfo(t) {
+        let expiresAt = t.expiresAt || null;
+        let durationText = t.durationText || '';
+        let isExpired = t.isExpired || false;
+
+        if ((!expiresAt || !durationText) && t.token) {
+          try {
+            const parts = t.token.split('.');
+            if (parts.length === 3) {
+              const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+              if (payload.exp) {
+                expiresAt = payload.exp * 1000;
+                isExpired = Date.now() > expiresAt;
+                const totalSecs = payload.iat ? payload.exp - payload.iat : Math.round((expiresAt - (t.createdAt || Date.now())) / 1000);
+                const days = Math.round(totalSecs / 86400);
+                if (days >= 3600) {
+                  durationText = '永久有效 (10 年)';
+                } else if (days >= 350) {
+                  durationText = '1 年 (365 天)';
+                } else if (days >= 80 && days <= 100) {
+                  durationText = '90 天';
+                } else if (days >= 25 && days <= 35) {
+                  durationText = '30 天';
+                } else {
+                  durationText = `${days} 天`;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        if (!durationText) durationText = '1 年 (365 天)';
+        return { expiresAt, durationText, isExpired };
+      }
+
       function renderTokenTableBody() {
         if (!tokensList || tokensList.length === 0) {
-          return `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">暂无专属设备令牌，您可点击下方创建</td></tr>`;
+          return `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">暂无专属设备令牌，您可点击下方创建</td></tr>`;
         }
         return tokensList.map((t) => {
           const displayMasked = t.maskedToken || (t.token ? `${t.token.slice(0, 10)}...${t.token.slice(-6)}` : '******');
+          const { expiresAt, durationText, isExpired } = getTokenExpiryInfo(t);
+          const expiryHtml = isExpired
+            ? `<span style="color:var(--danger);font-size:12px;font-weight:500;" title="令牌已过期">⚠️ ${new Date(expiresAt).toLocaleString()} (已过期)</span>`
+            : expiresAt
+            ? `<span style="color:var(--text-secondary);font-size:12px;">${new Date(expiresAt).toLocaleString()}</span>`
+            : `<span style="color:var(--muted);font-size:12px;">永久有效</span>`;
+
           return `
             <tr id="token-row-${t.id}">
               <td><b>${escapeHtml(t.label || '设备')}</b></td>
@@ -5854,11 +5896,19 @@
                   <button class="token-act-btn primary token-copy-btn" data-token="${escapeHtml(t.token || '')}" title="复制完整令牌">📋 复制</button>
                 </div>
               </td>
+              <td>
+                <span class="token-duration-badge" style="display:inline-block;background:var(--panel-2);border:1px solid var(--border);padding:2px 8px;border-radius:10px;font-size:11.5px;color:var(--text-secondary);white-space:nowrap;">
+                  ${escapeHtml(durationText)}
+                </span>
+              </td>
+              <td>${expiryHtml}</td>
               <td style="color:var(--muted);font-size:12px;">${new Date(t.createdAt).toLocaleString()}</td>
               <td style="color:var(--muted);font-size:12px;">${t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : '<span style="color:var(--muted)">从未使用</span>'}</td>
               <td>
-                <div style="display:flex;gap:6px;align-items:center;">
+                <div style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;">
                   <button class="btn-sm secondary token-cfg-btn" data-tokenid="${t.id}" title="查看并复制对应 Obsidian 插件配置">⚡ 配置</button>
+                  <button class="btn-sm secondary token-extend-btn" data-tokenid="${t.id}" title="手动延长此令牌的到期时间" style="color:var(--accent);">⏳ 延期</button>
+                  <button class="btn-sm secondary token-renew-btn" data-tokenid="${t.id}" title="重新生成新的访问令牌（旧令牌失效）">🔄 重签</button>
                   <button class="btn-sm ghost token-del-btn" data-tokenid="${t.id}" title="注销设备令牌" style="color:var(--danger)">注销</button>
                 </div>
               </td>
@@ -5871,18 +5921,20 @@
         <div class="settings-card">
           <div class="settings-card-header">
             <h3><span>🔑</span> 多端专属设备令牌 (Device Access Tokens)</h3>
-            <p>为每台设备（如 MacBook、iPhone、Windows 办公电脑）签发独立 Token，支持随时查看、复制与注销，各端独立鉴权便于安全管理</p>
+            <p>为每台设备（如 MacBook、iPhone、Windows 办公电脑）签发独立 Token，支持随时查看、复制、到期延期、重新生成与注销，各端独立鉴权便于安全管理</p>
           </div>
 
           <div class="token-table-wrap" style="margin-bottom:20px;">
             <table class="token-table">
               <thead>
                 <tr>
-                  <th style="width:160px;">设备名称 / 备注</th>
+                  <th style="width:130px;">设备名称 / 备注</th>
                   <th>访问令牌 (Token)</th>
-                  <th style="width:160px;">创建时间</th>
-                  <th style="width:160px;">最近活跃</th>
-                  <th style="width:130px;">操作</th>
+                  <th style="width:110px;">令牌期限</th>
+                  <th style="width:155px;">到期时间</th>
+                  <th style="width:150px;">创建时间</th>
+                  <th style="width:150px;">最近活跃</th>
+                  <th style="width:215px;">操作</th>
                 </tr>
               </thead>
               <tbody id="tokens-table-tbody">
@@ -6013,7 +6065,195 @@
           };
         });
 
-        // 4. Revoke token
+        // 4. Extend token expiration
+        container.querySelectorAll('.token-extend-btn').forEach((btn) => {
+          btn.onclick = () => {
+            const tid = btn.dataset.tokenid;
+            const targetToken = tokensList.find((t) => t.id === tid);
+            if (!targetToken) return;
+
+            const { expiresAt, isExpired } = getTokenExpiryInfo(targetToken);
+            const currentExpiryText = isExpired
+              ? `<span style="color:var(--danger);font-weight:600;">⚠️ 已于 ${new Date(expiresAt).toLocaleString()} 过期</span>`
+              : expiresAt
+              ? `<span style="color:var(--text);font-weight:500;">${new Date(expiresAt).toLocaleString()}</span>`
+              : `<span style="color:var(--muted)">永久有效</span>`;
+
+            const modalHtml = `
+              <div class="modal-header">
+                <h3>⏳ 延长设备令牌有效期</h3>
+                <button class="modal-close ghost">✕</button>
+              </div>
+              <div class="modal-body">
+                <div style="background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">
+                  <div style="font-size:13.5px;color:var(--text);margin-bottom:4px;">设备名称：<b>${escapeHtml(targetToken.label)}</b></div>
+                  <div style="font-size:12.5px;color:var(--text-secondary);">当前状态：${currentExpiryText}</div>
+                </div>
+
+                <label style="display:block;margin-bottom:14px;">
+                  <span style="display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--text);">选择延长时长 (Extend Duration)</span>
+                  <select id="modal-extend-days-select" class="form-control" style="width:100%;">
+                    <option value="30">+ 30 天 (1 个月)</option>
+                    <option value="90">+ 90 天 (3 个月)</option>
+                    <option value="365" selected>+ 1 年 (365 天)</option>
+                    <option value="3650">+ 永久有效 (10 年)</option>
+                  </select>
+                </label>
+
+                <p style="color:var(--muted);font-size:12px;margin:0;line-height:1.5;">
+                  💡 <b>平滑延期说明</b>：若令牌未过期，将在原到期时间基础上顺延；若已过期，将从即日起延长。延期后系统会自动为该设备续签有效凭据，该设备无需重新输入即可恢复同步。
+                </p>
+              </div>
+              <div class="modal-footer">
+                <button id="modal-confirm-extend-btn" class="btn-primary">⏳ 确认延长有效期</button>
+                <button class="modal-close secondary">取消</button>
+              </div>
+            `;
+
+            showModal(modalHtml, (diag) => {
+              const confirmBtn = diag.querySelector('#modal-confirm-extend-btn');
+              if (confirmBtn) {
+                confirmBtn.onclick = async () => {
+                  const days = diag.querySelector('#modal-extend-days-select')?.value || '365';
+                  confirmBtn.disabled = true;
+                  confirmBtn.textContent = '延期处理中...';
+                  try {
+                    const res = await api(`/api/settings/tokens/${tid}/extend`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ extendDays: days }),
+                    });
+                    const body = await res.json();
+                    if (body.ok && body.token) {
+                      tokensList = tokensList.map((t) => (t.id === tid ? body.token : t));
+                      const tbody = container.querySelector('#tokens-table-tbody');
+                      if (tbody) tbody.innerHTML = renderTokenTableBody();
+                      bindTokenRowEvents();
+                      diag.remove();
+                      toast(`✓ 设备「${targetToken.label}」令牌已成功延长！到期时间：${new Date(body.token.expiresAt).toLocaleString()}`);
+                    } else {
+                      toast(`延期失败: ${body.error || '未知错误'}`, 'error');
+                      confirmBtn.disabled = false;
+                      confirmBtn.textContent = '⏳ 确认延长有效期';
+                    }
+                  } catch (err) {
+                    toast(`延期失败: ${err.message}`, 'error');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = '⏳ 确认延长有效期';
+                  }
+                };
+              }
+            });
+          };
+        });
+
+        // 5. Regenerate / Renew token
+        container.querySelectorAll('.token-renew-btn').forEach((btn) => {
+          btn.onclick = () => {
+            const tid = btn.dataset.tokenid;
+            const targetToken = tokensList.find((t) => t.id === tid);
+            if (!targetToken) return;
+
+            const modalHtml = `
+              <div class="modal-header">
+                <h3>🔄 重新生成设备访问令牌</h3>
+                <button class="modal-close ghost">✕</button>
+              </div>
+              <div class="modal-body">
+                <div style="background:rgba(210,153,34,0.1);border:1px solid rgba(210,153,34,0.3);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">
+                  <div style="color:var(--warning);font-weight:600;font-size:13.5px;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                    <span>⚠️</span> 安全重置提醒
+                  </div>
+                  <div style="color:var(--text-secondary);font-size:12.5px;line-height:1.5;">
+                    重新为设备 <b>${escapeHtml(targetToken.label)}</b> 生成 Token 后，<b>旧 Token 将立即废除作废</b>。重新生成后请将新 Token 复制并填入该设备的 Obsidian 插件中。
+                  </div>
+                </div>
+
+                <label style="display:block;margin-bottom:14px;">
+                  <span style="display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--text);">新令牌有效期 (Token Expiration)</span>
+                  <select id="modal-renew-days-select" class="form-control" style="width:100%;">
+                    <option value="30">30 天</option>
+                    <option value="90">90 天</option>
+                    <option value="365" selected>1 年 (365 天)</option>
+                    <option value="3650">永久有效 (10 年)</option>
+                  </select>
+                </label>
+              </div>
+              <div class="modal-footer">
+                <button id="modal-confirm-renew-btn" class="btn-primary" style="background:#d29922;border-color:#bb8009;">🔄 确认重新生成</button>
+                <button class="modal-close secondary">取消</button>
+              </div>
+            `;
+
+            showModal(modalHtml, (diag) => {
+              const confirmBtn = diag.querySelector('#modal-confirm-renew-btn');
+              if (confirmBtn) {
+                confirmBtn.onclick = async () => {
+                  const expiry = diag.querySelector('#modal-renew-days-select')?.value || '365';
+                  confirmBtn.disabled = true;
+                  confirmBtn.textContent = '重签生成中...';
+                  try {
+                    const res = await api(`/api/settings/tokens/${tid}/regenerate`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ expiresInDays: expiry }),
+                    });
+                    const body = await res.json();
+                    if (body.ok && body.token) {
+                      const newToken = body.token;
+                      tokensList = tokensList.map((t) => (t.id === tid ? newToken : t));
+                      const tbody = container.querySelector('#tokens-table-tbody');
+                      if (tbody) tbody.innerHTML = renderTokenTableBody();
+                      bindTokenRowEvents();
+                      diag.remove();
+
+                      // Show success modal with quick copy
+                      const successModalHtml = `
+                        <div class="modal-header">
+                          <h3>🎉 新令牌生成成功</h3>
+                          <button class="modal-close ghost">✕</button>
+                        </div>
+                        <div class="modal-body">
+                          <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">
+                            设备 <b>${escapeHtml(newToken.label)}</b> 的访问令牌已重新生成。请复制并更新至该设备的 Obsidian 插件中：
+                          </p>
+                          <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
+                            <input type="text" readonly value="${escapeHtml(newToken.token)}" id="modal-renewed-token-input" style="font-family:ui-monospace,monospace;font-size:12px;background:var(--panel-2);border:1px solid var(--border);padding:8px 10px;border-radius:6px;flex:1;" />
+                            <button id="modal-copy-renewed-token-btn" class="btn-primary" style="flex-shrink:0;">📋 复制 Token</button>
+                          </div>
+                        </div>
+                        <div class="modal-footer">
+                          <button class="modal-close secondary">完成</button>
+                        </div>
+                      `;
+                      showModal(successModalHtml, (successDiag) => {
+                        successDiag.querySelector('#modal-copy-renewed-token-btn').onclick = () => {
+                          if (navigator.clipboard?.writeText) {
+                            navigator.clipboard.writeText(newToken.token).then(() => toast('✓ 新 Token 已复制到剪贴板！'));
+                          } else {
+                            prompt('复制新 Token：', newToken.token);
+                          }
+                        };
+                      });
+
+                      toast(`✓ 设备「${newToken.label}」Token 已重新生成`);
+                    } else {
+                      toast(`重签失败: ${body.error || '未知错误'}`, 'error');
+                      confirmBtn.disabled = false;
+                      confirmBtn.textContent = '🔄 确认重新生成';
+                    }
+                  } catch (err) {
+                    toast(`重签失败: ${err.message}`, 'error');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = '🔄 确认重新生成';
+                  }
+                };
+              }
+            });
+          };
+        });
+
+        // 6. Revoke token
         container.querySelectorAll('.token-del-btn').forEach((btn) => {
           btn.onclick = async () => {
             const tid = btn.dataset.tokenid;

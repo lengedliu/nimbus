@@ -1,5 +1,41 @@
 [
   {
+    "id": "109f332e2664016e",
+    "userId": "a0f9df37-9f58-4298-997b-ffb51ab82dbd",
+    "deviceName": "Test Device For Renewal",
+    "platform": "desktop",
+    "clientIp": "",
+    "userAgent": "",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMGY5ZGYzNy05ZjU4LTQyOTgtOTk3Yi1mZmI1MWFiODJkYmQiLCJ1c2VybmFtZSI6ImFkbWluIiwiZGV2aWNlSWQiOiIxMDlmMzMyZTI2NjQwMTZlIiwiZGV2aWNlTmFtZSI6IlRlc3QgRGV2aWNlIEZvciBSZW5ld2FsIiwidHlwZSI6ImRldmljZSIsImlhdCI6MTc4ODEwMjY0NSwiZXhwIjoxODE5NjM4NjQ1fQ.oQvCBTPMuBq-wM69cFveHC5Zjl08B6ThGjyPuDtNcw8",
+    "createdAt": 1788102645493,
+    "lastActiveAt": 1788102645478,
+    "status": "revoked"
+  },
+  {
+    "id": "e18228dab9ff7ff9",
+    "userId": "a0f9df37-9f58-4298-997b-ffb51ab82dbd",
+    "deviceName": "testa",
+    "platform": "desktop",
+    "clientIp": "",
+    "userAgent": "",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMGY5ZGYzNy05ZjU4LTQyOTgtOTk3Yi1mZmI1MWFiODJkYmQiLCJ1c2VybmFtZSI6ImFkbWluIiwiZGV2aWNlSWQiOiJlMTgyMjhkYWI5ZmY3ZmY5IiwiZGV2aWNlTmFtZSI6InRlc3RhIiwidHlwZSI6ImRldmljZSIsImlhdCI6MTc4ODEwMjU2NSwiZXhwIjoxODE5NjM4NTY1fQ.9qbtX2ZglqY8BW43MR3JcwSAfB6eC1Stq-ggtNjrUUY",
+    "createdAt": 1788102565195,
+    "lastActiveAt": 1788102565195,
+    "status": "active"
+  },
+  {
+    "id": "cd1197db96d0601a",
+    "userId": "a0f9df37-9f58-4298-997b-ffb51ab82dbd",
+    "deviceName": "iPhone 16 Pro",
+    "platform": "desktop",
+    "clientIp": "",
+    "userAgent": "",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMGY5ZGYzNy05ZjU4LTQyOTgtOTk3Yi1mZmI1MWFiODJkYmQiLCJ1c2VybmFtZSI6ImFkbWluIiwiZGV2aWNlSWQiOiJjZDExOTdkYjk2ZDA2MDFhIiwiZGV2aWNlTmFtZSI6ImlQaG9uZSAxNiBQcm8iLCJ0eXBlIjoiZGV2aWNlIiwiaWF0IjoxNzg4MTAyMzI4LCJleHAiOjE3OTU4NzgzMjh9.DKXstE5CCw1PhFAzsWBRJ-O7QlQXb5ydYPvkDdpd26U",
+    "createdAt": 1788102328886,
+    "lastActiveAt": 1788102328886,
+    "status": "revoked"
+  },
+  {
     "id": "40fba64ec317cc47",
     "userId": "a0f9df37-9f58-4298-997b-ffb51ab82dbd",
     "deviceName": "测试自动化应用",

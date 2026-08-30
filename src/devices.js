@@ -134,6 +134,103 @@ function recordActivity(deviceIdOrToken, { clientIp, userAgent, deviceName } = {
   }
 }
 
+function regenerateDeviceToken(id, user, expiresInDays = 365, isAdmin = false) {
+  const durationDays = Number(expiresInDays) > 0 ? Number(expiresInDays) : 365;
+  const now = Date.now();
+  let updatedRecord = null;
+
+  devicesCache = devicesCache.map((d) => {
+    if (d.id === id && (isAdmin || d.userId === user.id)) {
+      const newToken = jwt.sign(
+        { sub: d.userId, username: user.username, deviceId: d.id, deviceName: d.deviceName, type: 'device' },
+        JWT_SECRET,
+        { expiresIn: durationDays > 0 ? `${durationDays}d` : '3650d' }
+      );
+      updatedRecord = {
+        ...d,
+        token: newToken,
+        createdAt: now,
+        status: 'active',
+      };
+      return updatedRecord;
+    }
+    return d;
+  });
+
+  if (updatedRecord) {
+    if (dbManager.type === 'json') {
+      jsonDb.update((list) =>
+        (Array.isArray(list) ? list : []).map((d) =>
+          d.id === id && (isAdmin || d.userId === user.id) ? updatedRecord : d
+        )
+      );
+    } else {
+      dbManager
+        .execute(
+          'UPDATE api_tokens SET token = ?, created_at = ? WHERE id = ?' + (!isAdmin ? ' AND user_id = ?' : ''),
+          !isAdmin ? [updatedRecord.token, updatedRecord.createdAt, id, user.id] : [updatedRecord.token, updatedRecord.createdAt, id]
+        )
+        .catch((err) => console.error('[Devices] DB update token error:', err));
+    }
+  }
+
+  return updatedRecord;
+}
+
+function extendDeviceToken(id, user, extendDays = 365, isAdmin = false) {
+  const addDays = Number(extendDays) > 0 ? Number(extendDays) : 365;
+  let updatedRecord = null;
+
+  devicesCache = devicesCache.map((d) => {
+    if (d.id === id && (isAdmin || d.userId === user.id)) {
+      let remainingSecs = 0;
+      try {
+        const decoded = jwt.decode(d.token);
+        if (decoded && decoded.exp) {
+          const expMs = decoded.exp * 1000;
+          if (expMs > Date.now()) {
+            remainingSecs = Math.max(0, Math.round((expMs - Date.now()) / 1000));
+          }
+        }
+      } catch (e) {}
+
+      const totalSecs = remainingSecs + addDays * 86400;
+      const newToken = jwt.sign(
+        { sub: d.userId, username: user.username, deviceId: d.id, deviceName: d.deviceName, type: 'device' },
+        JWT_SECRET,
+        { expiresIn: `${totalSecs}s` }
+      );
+
+      updatedRecord = {
+        ...d,
+        token: newToken,
+        status: 'active',
+      };
+      return updatedRecord;
+    }
+    return d;
+  });
+
+  if (updatedRecord) {
+    if (dbManager.type === 'json') {
+      jsonDb.update((list) =>
+        (Array.isArray(list) ? list : []).map((d) =>
+          d.id === id && (isAdmin || d.userId === user.id) ? updatedRecord : d
+        )
+      );
+    } else {
+      dbManager
+        .execute(
+          'UPDATE api_tokens SET token = ? WHERE id = ?' + (!isAdmin ? ' AND user_id = ?' : ''),
+          !isAdmin ? [updatedRecord.token, id, user.id] : [updatedRecord.token, id]
+        )
+        .catch((err) => console.error('[Devices] DB update token error:', err));
+    }
+  }
+
+  return updatedRecord;
+}
+
 function revokeDevice(id, userId, isAdmin = false) {
   let found = false;
   devicesCache = devicesCache.map((d) => {
@@ -173,6 +270,8 @@ module.exports = {
   listForUser,
   listAll,
   generateDeviceToken,
+  regenerateDeviceToken,
+  extendDeviceToken,
   recordActivity,
   revokeDevice,
   isTokenRevoked,
