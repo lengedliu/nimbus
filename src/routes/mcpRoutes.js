@@ -7,15 +7,18 @@ const { buildMcpServer } = require('../mcp');
 const router = express.Router();
 router.use(requireAuth);
 
-/** Resolve X-Default-Vault-Name or X-Default-Vault-Id to a vault id owned by the user. */
+/** Resolve X-Default-Vault-Name or X-Default-Vault-Id to a vault id accessible by the user. */
 function resolveDefaultVaultId(req) {
-  const directId = req.headers['x-default-vault-id'];
-  if (directId && vaultsStore.userOwnsVault(req.user.id, directId)) {
-    return directId;
+  const directId = (req.headers['x-default-vault-id'] || '').trim();
+  const userVaults = vaultsStore.listForUser(req.user.id, req.user.role === 'admin');
+  if (directId) {
+    const foundDirect = userVaults.find((v) => v.id === directId || (v.id || '').toLowerCase() === directId.toLowerCase());
+    if (foundDirect) return foundDirect.id;
   }
-  const name = req.headers['x-default-vault-name'];
+  const name = (req.headers['x-default-vault-name'] || '').trim();
   if (!name) return undefined;
-  const vault = vaultsStore.listForUser(req.user.id).find((v) => v.name === name || v.id === name);
+  const lower = name.toLowerCase();
+  const vault = userVaults.find((v) => v.name === name || (v.name || '').toLowerCase() === lower || v.id === name || (v.id || '').toLowerCase() === lower);
   return vault?.id;
 }
 

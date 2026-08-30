@@ -85,16 +85,31 @@ function buildMcpServer(user, defaultVaultId) {
   const server = new McpServer({ name: 'nimbus-fast-note-sync', version: '1.2.0' });
 
   function resolveVaultId(vaultId) {
-    const id = vaultId || defaultVaultId;
-    if (!id) {
+    const input = (vaultId || defaultVaultId || '').trim();
+    if (!input) {
       throw new Error(
-        'No vault specified. Pass a vaultId, set the X-Default-Vault-Name header, or call list_vaults first.'
+        'No vault specified. Pass a vaultId (UUID or vault name), set the X-Default-Vault-Name header, or call list_vaults first.'
       );
     }
-    if (!vaultsStore.userOwnsVault(user.id, id)) {
-      throw new Error(`Vault "${id}" not found or unauthorized for this account.`);
+    const userVaults = vaultsStore.listForUser(user.id, user.role === 'admin');
+    // 1. Match by exact ID
+    let found = userVaults.find((v) => v.id === input);
+    // 2. Match by exact Name
+    if (!found) {
+      found = userVaults.find((v) => v.name === input);
     }
-    return id;
+    // 3. Match by Case-insensitive Name
+    if (!found) {
+      const lower = input.toLowerCase();
+      found = userVaults.find((v) => (v.name || '').toLowerCase() === lower || (v.id || '').toLowerCase() === lower);
+    }
+
+    if (!found) {
+      throw new Error(
+        `Vault "${input}" not found or unauthorized for this account. Available vaults: ${userVaults.map((v) => `"${v.name}" (${v.id})`).join(', ') || 'none'}`
+      );
+    }
+    return found.id;
   }
 
   // ------------------------- 1. Vault Management & Stats -------------------------
