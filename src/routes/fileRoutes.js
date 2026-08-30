@@ -3,6 +3,7 @@ const { requireAuth } = require('../auth');
 const vaults = require('../vaults');
 const storage = require('../storage');
 const syncLogger = require('../syncLogger');
+const webhooks = require('../webhooks');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -130,6 +131,15 @@ router.delete('/:vaultId/files/*', (req, res) => {
   const deviceName = req.headers['x-device-name'] || 'REST / Web Client';
   const ok = storage.deleteFile(req.params.vaultId, relPath);
   req.app.get('fnsHub').broadcastFileDelete(req.params.vaultId, relPath, req.user.id);
+
+  if (ok) {
+    webhooks.trigger('file.deleted', {
+      vaultId: req.params.vaultId,
+      path: relPath,
+      userId: req.user.id,
+      username: req.user.username,
+    }).catch(() => {});
+  }
 
   syncLogger.recordLog({
     vaultId: req.params.vaultId,

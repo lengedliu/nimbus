@@ -5,6 +5,7 @@ const vaultsStore = require('./vaults');
 const sharesStore = require('./shares');
 const fnsHub = require('./wsHub');
 const gitSync = require('./gitSync');
+const webhooks = require('./webhooks');
 
 /*
  * MCP tool set for Nimbus Vault Sync, modeled after and extending the reference
@@ -760,6 +761,12 @@ function buildMcpServer(user, defaultVaultId) {
       const ok = storage.deleteFile(id, notePath);
       if (ok) {
         fnsHub.broadcastFileDelete(id, notePath, user.id);
+        webhooks.trigger('file.deleted', {
+          vaultId: id,
+          path: notePath,
+          userId: user.id,
+          username: user.username,
+        }).catch(() => {});
         return textResult(`Deleted "${notePath}" (moved to vault trash). Synced to all connected devices.`);
       }
       return textResult(`"${notePath}" did not exist in vault.`);

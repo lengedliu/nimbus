@@ -147,10 +147,10 @@ async function resolveConflict(vaultId, { conflictPath, resolution, customConten
     const manifest = storage.getManifest(vaultId);
     const meta = manifest[basePath];
     if (meta) {
-      fnsHub.broadcastFileChange(vaultId, basePath, { currentHash: meta.hash }, userId, true);
+      fnsHub.broadcastFileChange(vaultId, basePath, { currentHash: meta.hash }, userId);
     }
     // Also broadcast deletion of the conflict file to clean up clients
-    fnsHub.broadcastFileChange(vaultId, conflictPath, { deleted: true }, userId, true);
+    fnsHub.broadcastFileDelete(vaultId, conflictPath, userId);
   }
 
   // Trigger webhook notification

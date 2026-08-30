@@ -994,10 +994,34 @@
           <button class="view-mode-btn ${state.fileViewMode === 'flat' ? 'active' : ''}" data-mode="flat" title="平铺文件路径列表显示">
             <span>📋</span> 平铺列表
           </button>
+          <button class="view-mode-btn" id="files-toolbar-refresh-btn" title="从服务端重新加载文件清单">
+            <span>🔄</span> 刷新
+          </button>
         </div>
       </div>
     `;
     container.appendChild(toolbar);
+
+    // Refresh button click in toolbar
+    const toolbarRefreshBtn = toolbar.querySelector('#files-toolbar-refresh-btn');
+    if (toolbarRefreshBtn) {
+      toolbarRefreshBtn.onclick = async () => {
+        toolbarRefreshBtn.disabled = true;
+        toolbarRefreshBtn.innerHTML = '<span>⏳</span> 刷新中...';
+        try {
+          const res = await api(`/api/vaults/${vaultId}/manifest`);
+          const body = await res.json();
+          state.manifest = body.manifest;
+          toast('文件列表已刷新');
+          renderFileList(vaultId, container);
+        } catch (err) {
+          toast('刷新失败: ' + (err.message || '网络异常'), 'error');
+        } finally {
+          toolbarRefreshBtn.disabled = false;
+          toolbarRefreshBtn.innerHTML = '<span>🔄</span> 刷新';
+        }
+      };
+    }
 
     // Filter pill clicks
     toolbar.querySelectorAll('.filter-pill').forEach((pill) => {
@@ -1147,11 +1171,10 @@
   function renderTreeFileList(vaultId, listWrapper, paths, manifest) {
     const { root, allFolderPaths } = buildFileTree(paths, manifest);
 
-    // If first load for this vault, default all folders to expanded
+    // If first load for this vault, default all folders to collapsed
     if (!state.treeFoldersInitialized) {
       state.treeFoldersInitialized = true;
       state.expandedFolders.clear();
-      allFolderPaths.forEach((fp) => state.expandedFolders.add(fp));
     }
 
     const wrapper = document.createElement('div');
@@ -1176,6 +1199,7 @@
         </label>
         <button class="tree-ctrl-btn" id="tree-expand-all-btn">➕ 全部展开</button>
         <button class="tree-ctrl-btn" id="tree-collapse-all-btn">➖ 全部折叠</button>
+        <button class="tree-ctrl-btn" id="tree-refresh-btn" title="重新从服务端刷新文件列表">🔄 刷新</button>
       </div>
     `;
     wrapper.appendChild(bar);
@@ -1197,6 +1221,25 @@
       state.expandedFolders.clear();
       renderFileList(vaultId, listWrapper);
     };
+    const refreshBtn = bar.querySelector('#tree-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.onclick = async () => {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '⏳ 刷新中...';
+        try {
+          const res = await api(`/api/vaults/${vaultId}/manifest`);
+          const body = await res.json();
+          state.manifest = body.manifest;
+          toast('文件列表已刷新');
+          renderFileList(vaultId, listWrapper);
+        } catch (err) {
+          toast('刷新失败: ' + (err.message || '网络异常'), 'error');
+        } finally {
+          refreshBtn.disabled = false;
+          refreshBtn.innerHTML = '🔄 刷新';
+        }
+      };
+    }
 
     // Header row
     const header = document.createElement('div');

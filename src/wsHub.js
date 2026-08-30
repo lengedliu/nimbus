@@ -283,7 +283,7 @@ class FnsHub {
         });
 
         this._send(client.ws, { type: 'ack', path: msg.path, hash: result.currentHash });
-        this.broadcastFileChange(vaultId, msg.path, result, client.userId);
+        this.broadcastFileChange(vaultId, msg.path, result, client.userId, client.ws);
         return;
       }
 
@@ -305,7 +305,7 @@ class FnsHub {
           detail: ok ? '移入回收站' : '文件不存在',
         });
 
-        this.broadcastFileDelete(vaultId, msg.path, client.userId);
+        this.broadcastFileDelete(vaultId, msg.path, client.userId, client.ws);
         return;
       }
 
@@ -325,8 +325,8 @@ class FnsHub {
     }
   }
 
-  /** Push a changed file to every OTHER connected client for this vault. */
-  broadcastFileChange(vaultId, relPath, result, fromUserId, readFromDisk = false) {
+  /** Push a changed file to every connected client for this vault (except the sender WebSocket if provided). */
+  broadcastFileChange(vaultId, relPath, result, fromUserId, excludeWs = null) {
     this._logActivity(vaultId, { type: 'change', path: relPath, userId: fromUserId });
     const room = this.rooms.get(vaultId);
     if (!room || room.size === 0) return;
@@ -336,20 +336,21 @@ class FnsHub {
       type: 'change',
       path: relPath,
       content: buf.toString('base64'),
-      hash: result.currentHash,
+      hash: result?.currentHash,
     };
     for (const client of room) {
-      if (client.userId === fromUserId && !readFromDisk) continue; // don't echo back to the sender (REST callers pass their own id too)
+      if (excludeWs && client.ws === excludeWs) continue; // don't echo back to the pushing socket
       this._send(client.ws, payload);
     }
   }
 
-  broadcastFileDelete(vaultId, relPath, fromUserId) {
+  /** Push file deletion to all connected clients for this vault (except the sender WebSocket if provided). */
+  broadcastFileDelete(vaultId, relPath, fromUserId, excludeWs = null) {
     this._logActivity(vaultId, { type: 'delete', path: relPath, userId: fromUserId });
     const room = this.rooms.get(vaultId);
-    if (!room) return;
+    if (!room || room.size === 0) return;
     for (const client of room) {
-      if (client.userId === fromUserId) continue;
+      if (excludeWs && client.ws === excludeWs) continue; // don't echo back to the deleting socket
       this._send(client.ws, { type: 'deleted', path: relPath });
     }
   }
