@@ -133,6 +133,13 @@ module.exports = {
   isPathIgnored,
   DEFAULT_RULES,
   loadFromDb,
+  getRawRules: () => {
+    const res = {};
+    for (const [k, v] of rulesCache.entries()) {
+      res[k] = v;
+    }
+    return res;
+  },
   getAllRules: () => {
     const res = {};
     for (const [k, v] of rulesCache.entries()) {

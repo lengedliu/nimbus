@@ -254,6 +254,7 @@ function set(key, val) {
 module.exports = {
   DEFAULT_SYSTEM_SETTINGS,
   getSystemSettings,
+  getAll: getSystemSettings,
   updateSystemSettings,
   get,
   set,
@@ -263,4 +264,5 @@ module.exports = {
   generatePluginConfig,
   loadFromDb,
   getAllTokens: () => cachedTokens,
+  listAllTokens: () => cachedTokens,
 };

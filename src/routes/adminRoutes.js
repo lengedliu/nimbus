@@ -197,12 +197,12 @@ router.post('/database/switch', async (req, res) => {
   try {
     // Snapshot current memory state before switching if migration requested
     const dataset = {
-      users: users.getRawUsers(),
-      vaults: vaultsStore.getRawVaults(),
-      shares: sharesStore.getRawShares(),
-      syncRules: syncRulesStore.getRawRules(),
-      systemSettings: settingsManager.getAll(),
-      apiTokens: settingsManager.listAllTokens ? settingsManager.listAllTokens() : [],
+      users: users.getRawUsers ? users.getRawUsers() : [],
+      vaults: vaultsStore.getRawVaults ? vaultsStore.getRawVaults() : [],
+      shares: sharesStore.getRawShares ? sharesStore.getRawShares() : [],
+      syncRules: syncRulesStore.getRawRules ? syncRulesStore.getRawRules() : (syncRulesStore.getAllRules ? syncRulesStore.getAllRules() : {}),
+      systemSettings: settingsManager.getSystemSettings ? settingsManager.getSystemSettings() : {},
+      apiTokens: settingsManager.getAllTokens ? settingsManager.getAllTokens() : [],
       syncLogs: syncLogger.getRawLogs ? syncLogger.getRawLogs() : [],
     };
 
