@@ -500,6 +500,99 @@ function buildMcpServer(user, defaultVaultId) {
     }
   );
 
+  server.tool(
+    'upload_attachment',
+    'Upload a binary file, image, PDF, audio, or media attachment into the vault (via Base64 encoding or by downloading from a web source URL). Automatically updates index, broadcasts real-time sync, and provides ready-to-use Obsidian wikilink syntax (![[path]]).',
+    {
+      vaultId: z.string().optional().describe('Vault ID (defaults to default vault).'),
+      path: z.string().describe('Vault-relative path for the attachment, e.g. "_resources/image.png" or "Attachments/spec.pdf".'),
+      contentBase64: z.string().optional().describe('Base64-encoded string (or data: URL) of the binary file. Required if sourceUrl is not provided.'),
+      sourceUrl: z.string().optional().describe('Direct HTTP/HTTPS URL of the image or file to download into the vault. Used if contentBase64 is omitted.'),
+      overwrite: z.boolean().optional().describe('If true, overwrites any existing file at the path. Defaults to true.'),
+    },
+    async ({ vaultId, path: filePath, contentBase64, sourceUrl, overwrite = true }) => {
+      const id = resolveVaultId(vaultId);
+      const manifest = storage.getManifest(id) || {};
+
+      if (manifest[filePath] && !overwrite) {
+        throw new Error(`Attachment file "${filePath}" already exists in vault. Set overwrite: true to replace.`);
+      }
+
+      let buffer;
+      if (contentBase64) {
+        // Strip data URI header if present (e.g. data:image/png;base64,...)
+        const rawBase64 = contentBase64.replace(/^data:[^;]+;base64,/, '');
+        buffer = Buffer.from(rawBase64, 'base64');
+      } else if (sourceUrl) {
+        const resp = await fetch(sourceUrl);
+        if (!resp.ok) {
+          throw new Error(`Failed to download attachment from URL: HTTP ${resp.status} ${resp.statusText}`);
+        }
+        const arrayBuf = await resp.arrayBuffer();
+        buffer = Buffer.from(arrayBuf);
+      } else {
+        throw new Error('Either contentBase64 or sourceUrl must be provided to upload an attachment.');
+      }
+
+      const result = storage.writeFile(id, filePath, buffer, { mtime: Date.now() });
+      fnsHub.broadcastFileChange(id, filePath, result, user.id);
+
+      const fileName = filePath.split('/').pop() || filePath;
+      return jsonResult({
+        success: true,
+        path: filePath,
+        fileName,
+        sizeBytes: buffer.length,
+        sizeFormatted: (buffer.length / 1024).toFixed(1) + ' KB',
+        hash: result.currentHash,
+        obsidianEmbedWikiLink: `![[${fileName}]]`,
+        obsidianFullWikiLink: `![[${filePath}]]`,
+        markdownEmbedLink: `![](${encodeURI(filePath)})`,
+        message: `Attachment "${filePath}" (${buffer.length} bytes) saved and synced to all clients.`,
+      });
+    }
+  );
+
+  server.tool(
+    'get_attachment_base64',
+    'Read an attachment (image, PDF, audio, media) from the vault as a Base64-encoded string for AI visual inspection or processing.',
+    {
+      vaultId: z.string().optional().describe('Vault ID.'),
+      path: z.string().describe('Vault-relative path of the attachment, e.g. "_resources/photo.png".'),
+    },
+    async ({ vaultId, path: filePath }) => {
+      const id = resolveVaultId(vaultId);
+      const buf = storage.readFile(id, filePath);
+      if (buf === null) {
+        throw new Error(`Attachment "${filePath}" not found in vault.`);
+      }
+
+      const ext = (filePath.split('.').pop() || '').toLowerCase();
+      const mimeTypes = {
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        gif: 'image/gif',
+        webp: 'image/webp',
+        svg: 'image/svg+xml',
+        pdf: 'application/pdf',
+        mp3: 'audio/mpeg',
+        wav: 'audio/wav',
+        mp4: 'video/mp4',
+        zip: 'application/zip',
+      };
+      const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+      return jsonResult({
+        path: filePath,
+        sizeBytes: buf.length,
+        mimeType,
+        base64: buf.toString('base64'),
+        dataUrl: `data:${mimeType};base64,${buf.toString('base64')}`,
+      });
+    }
+  );
+
   // ------------------------- 4. Daily Notes Support -------------------------
 
   server.tool(

@@ -60,6 +60,17 @@ function invalidateManifestCache(vaultId) {
   inMemoryManifestCache.delete(vaultId);
 }
 
+function updateManifestEntry(vaultId, relPath, meta) {
+  const cachedMem = inMemoryManifestCache.get(vaultId);
+  if (cachedMem && cachedMem.manifest) {
+    if (meta === null) {
+      delete cachedMem.manifest[relPath];
+    } else {
+      cachedMem.manifest[relPath] = meta;
+    }
+  }
+}
+
 function saveCache(vaultId, cache) {
   const p = manifestCachePath(vaultId);
   const tmp = p + '.tmp.' + Date.now();
@@ -89,7 +100,7 @@ function walk(dir, base, out = []) {
 /** Build a manifest: { path: { size, mtimeMs, hash } }, cached in memory and on disk. */
 function getManifest(vaultId, forceRefresh = false) {
   const cachedMem = inMemoryManifestCache.get(vaultId);
-  if (!forceRefresh && cachedMem && Date.now() - cachedMem.lastScanned < 3000) {
+  if (!forceRefresh && cachedMem && cachedMem.manifest) {
     return cachedMem.manifest;
   }
 
@@ -229,7 +240,9 @@ function restoreFromTrash(vaultId, trashId) {
 
   fs.unlinkSync(trashFull);
   saveIndex(idxPath, entries.filter((e) => e.id !== trashId));
-  invalidateManifestCache(vaultId);
+  const hash = sha256(buffer);
+  const now = Date.now();
+  updateManifestEntry(vaultId, entry.path, { size: buffer.length, mtime: now, ctime: now, hash });
   try {
     gitSync.notifyChange(vaultId);
   } catch {}
@@ -314,11 +327,12 @@ function writeFile(vaultId, relPath, buffer, { mtime, baseHash } = {}) {
 
   fs.writeFileSync(full, buffer);
   if (mtime) touchMtime(full, mtime);
-  invalidateManifestCache(vaultId);
+  const hash = sha256(buffer);
+  const mtimeVal = mtime || Date.now();
+  updateManifestEntry(vaultId, relPath, { size: buffer.length, mtime: mtimeVal, ctime: mtimeVal, hash });
   try {
     gitSync.notifyChange(vaultId);
   } catch {}
-  const hash = sha256(buffer);
   return { written: true, conflict: null, currentHash: hash };
 }
 
@@ -335,7 +349,7 @@ function deleteFile(vaultId, relPath) {
   const entries = loadIndex(idxPath);
   entries.push({ id, path: relPath, size: fs.statSync(path.join(trashDir(vaultId), id)).size, deletedAt: Date.now() });
   saveIndex(idxPath, entries);
-  invalidateManifestCache(vaultId);
+  updateManifestEntry(vaultId, relPath, null);
   try {
     gitSync.notifyChange(vaultId);
   } catch {}

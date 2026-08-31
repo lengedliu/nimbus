@@ -80,6 +80,18 @@ router.get('/tools', (req, res) => {
       parameters: { path: '必填', search: '待查找文本', replace: '替换文本', replaceAll: '可选布尔值', vaultId: '可选' },
     },
     {
+      name: 'upload_attachment',
+      category: '附件与多媒体',
+      description: '上传图片、PDF、音频或二进制附件到笔记库（支持 Base64 数据或指定网络图片 URL 自动下载存储），自动广播同步并返回 ![[附件名]] 双链语法。',
+      parameters: { path: '必填相对路径（如 "_resources/image.png"）', contentBase64: '可选 Base64 字符串', sourceUrl: '可选网络下载 URL', overwrite: '可选布尔值', vaultId: '可选' },
+    },
+    {
+      name: 'get_attachment_base64',
+      category: '附件与多媒体',
+      description: '将笔记库中的图片/附件读取为 Base64 编码，供 AI 视觉分析或多模态理解。',
+      parameters: { path: '必填附件路径', vaultId: '可选' },
+    },
+    {
       name: 'get_daily_note',
       category: '日记与日志 (Daily Note)',
       description: '获取今日（或指定日期）的 Obsidian 日记。若日记不存在可自动按规范初始化。',
