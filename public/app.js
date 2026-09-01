@@ -6802,13 +6802,6 @@
             </h2>
           </div>
           <div class="sponsor-title-right">
-            ${
-              isAdmin
-                ? `
-              <button class="btn-primary" id="sp-add-record-btn" style="font-size:12px;padding:5px 10px;">➕ 录入赞助</button>
-            `
-                : ''
-            }
             <button class="icon-btn-ghost" id="sp-refresh-btn" title="刷新列表">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -6872,7 +6865,7 @@
                 <div class="wechat-qr-frame">
                   ${
                     (config.wechatQrUrl || '/wechat-reward.jpg')
-                      ? `<img src="${escapeHtml(config.wechatQrUrl || '/wechat-reward.jpg')}" alt="微信赞赏码" class="wechat-qr-img" onerror="this.onerror=null;this.src='/wechat-reward.jpg';" />`
+                      ? `<img src="${escapeHtml(config.wechatQrUrl || '/wechat-reward.jpg')}" alt="微信赞赏码" class="wechat-qr-img" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/wechat-reward.jpg';" />`
                       : `
                     <!-- Default Stylized QR Graphic -->
                     <div class="wechat-qr-graphic">
