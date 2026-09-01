@@ -1,5 +1,7 @@
 # Nimbus Vault Sync — self-hosted Obsidian 同步 + 管理 + MCP + 开放 API 服务
 
+[简体中文](README.md) / [English](README_en.md) / [日本語](README_ja.md) / [한국어](README_ko.md) / [繁體中文](README_zh-TW.md)
+
 **Nimbus Vault Sync**（前身 FNS / Fast Note Sync）是一个轻量级、自托管、全功能的 Obsidian 云端同步与知识管理服务端：
 
 - 📡 **WebSocket 毫秒级实时同步** — 多设备/多 vault 协同，带版本防冲突乐观锁与实时状态广播
