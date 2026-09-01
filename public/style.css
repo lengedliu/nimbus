@@ -2832,24 +2832,32 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
 .kofi-btn-link {
   text-decoration: none;
   display: inline-block;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s ease;
 }
 
 .kofi-btn-link:hover {
-  transform: scale(1.04);
+  transform: translateY(-2px) scale(1.03);
+  filter: brightness(1.05);
+}
+
+.kofi-btn-link:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .kofi-badge-box {
   background: #ff5e5b;
   color: #ffffff;
-  padding: 12px 24px;
-  border-radius: 12px;
-  box-shadow: 0 4px 14px rgba(255, 94, 91, 0.35);
+  padding: 14px 28px;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(255, 94, 91, 0.4);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  min-width: 180px;
+  gap: 3px;
+  min-width: 190px;
+  user-select: none;
 }
 
 .kofi-text {

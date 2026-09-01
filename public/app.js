@@ -6947,31 +6947,15 @@
               <span class="sponsor-card-title">${escapeHtml(config.kofiLabel || '请作者喝杯咖啡')}</span>
             </div>
             <div class="sponsor-card-body">
-              ${
-                config.kofiUrl
-                  ? `
-                <a href="${escapeHtml(config.kofiUrl)}" target="_blank" rel="noopener noreferrer" class="kofi-btn-link" title="点击在 Ko-fi 上赞助作者">
-                  <div class="kofi-badge-box">
-                    <span class="kofi-text">Support me on</span>
-                    <div class="kofi-logo-wrap">
-                      <span class="kofi-cup">☕</span>
-                      <span class="kofi-brand">Ko-fi</span>
-                    </div>
-                  </div>
-                </a>
-              `
-                  : `
-                <div class="kofi-btn-link" style="cursor:default;" title="请作者喝杯咖啡">
-                  <div class="kofi-badge-box">
-                    <span class="kofi-text">Support me on</span>
-                    <div class="kofi-logo-wrap">
-                      <span class="kofi-cup">☕</span>
-                      <span class="kofi-brand">Ko-fi</span>
-                    </div>
+              <a href="${escapeHtml(config.kofiUrl || 'https://ko-fi.com/lengedliu')}" target="_blank" rel="noopener noreferrer" class="kofi-btn-link" title="点击在 Ko-fi 上赞助作者">
+                <div class="kofi-badge-box">
+                  <span class="kofi-text">Support me on</span>
+                  <div class="kofi-logo-wrap">
+                    <span class="kofi-cup">☕</span>
+                    <span class="kofi-brand">Ko-fi</span>
                   </div>
                 </div>
-              `
-              }
+              </a>
             </div>
           </div>
 
