@@ -4721,43 +4721,43 @@
         const devName = dev.name || dev.deviceName || dev.deviceId || 'Obsidian Client';
 
         card.innerHTML = `
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:26px;">${platformIcon}</span>
-              <div>
-                <div style="font-weight:600;font-size:15px;color:var(--text);display:flex;align-items:center;gap:6px;">
-                  <span>${escapeHtml(devName)}</span>
-                  ${dev.isOnline ? '<span class="badge success" style="font-size:10px;">🟢 在线活跃</span>' : '<span class="badge" style="font-size:10px;color:var(--muted)">⚪ 离线就绪</span>'}
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+              <span style="font-size:26px;flex-shrink:0;">${platformIcon}</span>
+              <div style="min-width:0;flex:1;">
+                <div style="font-weight:600;font-size:14.5px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                  <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="${escapeHtml(devName)}">${escapeHtml(devName)}</span>
+                  ${dev.isOnline ? '<span class="badge success" style="font-size:10.5px;white-space:nowrap;flex-shrink:0;">🟢 在线活跃</span>' : '<span class="badge" style="font-size:10.5px;color:var(--muted);white-space:nowrap;flex-shrink:0;">⚪ 离线就绪</span>'}
                 </div>
-                <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">
+                <div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                   设备 ID: <code>${escapeHtml(dev.id || dev.deviceId)}</code>
                 </div>
               </div>
             </div>
-            ${isAdmin && dev.username ? `<span class="badge primary" style="font-size:10.5px;">👤 ${escapeHtml(dev.username)}</span>` : ''}
+            ${isAdmin && dev.username ? `<span class="badge primary" style="font-size:10.5px;white-space:nowrap;flex-shrink:0;">👤 ${escapeHtml(dev.username)}</span>` : ''}
           </div>
 
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px;">
-            <div style="display:flex;justify-content:space-between;">
-              <span style="color:var(--muted)">最后同步活跃:</span>
-              <span>${lastActiveText}</span>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-bottom:14px;display:flex;flex-direction:column;gap:7px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span style="color:var(--muted);white-space:nowrap;flex-shrink:0;">最后同步活跃:</span>
+              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;" title="${lastActiveText}">${lastActiveText}</span>
             </div>
-            <div style="display:flex;justify-content:space-between;">
-              <span style="color:var(--muted)">客户端 IP:</span>
-              <code>${escapeHtml(dev.lastIp || dev.clientIp || '127.0.0.1')}</code>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span style="color:var(--muted);white-space:nowrap;flex-shrink:0;">客户端 IP:</span>
+              <code style="font-size:11.5px;font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;text-align:right;" title="${escapeHtml(dev.lastIp || dev.clientIp || '127.0.0.1')}">${escapeHtml(dev.lastIp || dev.clientIp || '127.0.0.1')}</code>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="color:var(--muted)">专属 Token:</span>
-              <div style="display:flex;align-items:center;gap:4px;">
-                <code style="font-size:11px;">${escapeHtml(dev.tokenPreview || (dev.token ? dev.token.slice(0, 10) + '...' : '••••••••••••'))}</code>
-                <button class="secondary copy-token-btn" style="padding:1px 6px;font-size:11px;">📋 复制 Token</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span style="color:var(--muted);white-space:nowrap;flex-shrink:0;">专属 Token:</span>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;white-space:nowrap;">
+                <code style="font-size:11px;font-family:ui-monospace,monospace;white-space:nowrap;">${escapeHtml(dev.tokenPreview || (dev.token ? dev.token.slice(0, 10) + '...' : '••••••••••••'))}</code>
+                <button class="secondary copy-token-btn" style="padding:2px 8px;font-size:11px;white-space:nowrap;flex-shrink:0;cursor:pointer;">📋 复制 Token</button>
               </div>
             </div>
           </div>
 
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-            <button class="secondary get-config-btn" style="font-size:12px;padding:4px 10px;flex:1;">⚡ 查看连接配置</button>
-            <button class="danger revoke-dev-btn" data-id="${dev.id || dev.deviceId}" style="font-size:12px;padding:4px 10px;">🚫 撤销令牌</button>
+            <button class="secondary get-config-btn" style="font-size:12px;padding:6px 10px;flex:1;white-space:nowrap;cursor:pointer;">⚡ 查看连接配置</button>
+            <button class="danger revoke-dev-btn" data-id="${dev.id || dev.deviceId}" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0;cursor:pointer;">🚫 撤销令牌</button>
           </div>
         `;
 

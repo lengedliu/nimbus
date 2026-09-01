@@ -487,6 +487,9 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.4;
 }
 .badge.primary {
   background: var(--accent-bg);
@@ -2205,8 +2208,8 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
 /* ----------------- Devices Management ----------------- */
 .devices-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 16px;
   margin-top: 14px;
 }
 .device-card {
@@ -2217,6 +2220,8 @@ button.block { width: 100%; margin-top: 12px; justify-content: center; }
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .device-card-header {
   display: flex;
