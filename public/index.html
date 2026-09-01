@@ -9,29 +9,62 @@
 </head>
 <body>
 
-<div id="login-view" class="center-screen center-box">
+<div id="login-view" class="center-screen center-box" style="position:relative;">
+  <!-- Login language switcher in the corner -->
+  <div class="login-lang-corner">
+    <div class="lang-picker-wrap">
+      <button type="button" id="login-lang-btn" class="lang-menu-btn" title="切换语言 / Switch Language">
+        <span>🌐</span>
+        <span id="login-lang-label">🇨🇳 简体中文</span>
+        <span style="font-size:10px;opacity:0.7;">▼</span>
+      </button>
+      <div id="login-lang-dropdown" class="lang-dropdown-menu hidden">
+        <button type="button" class="lang-opt-item" data-lang-val="zh-CN">
+          <span>🇨🇳</span>
+          <span>简体中文</span>
+        </button>
+        <button type="button" class="lang-opt-item" data-lang-val="zh-TW">
+          <span>🇭🇰</span>
+          <span>繁體中文</span>
+        </button>
+        <button type="button" class="lang-opt-item" data-lang-val="en">
+          <span>🇺🇸</span>
+          <span>English</span>
+        </button>
+        <button type="button" class="lang-opt-item" data-lang-val="ko">
+          <span>🇰🇷</span>
+          <span>한국어</span>
+        </button>
+        <button type="button" class="lang-opt-item" data-lang-val="ja">
+          <span>🇯🇵</span>
+          <span>日本語</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <form id="login-form" class="card login-card">
     <div class="brand">
       <span class="logo">☁️</span>
-      <span class="brand-name">Nimbus Vault Sync</span>
+      <span class="brand-name" data-i18n="login.title">Nimbus Vault Sync</span>
     </div>
-    <div class="subtitle">Obsidian 高速实时同步服务 · 管理后台</div>
+    <div class="subtitle" data-i18n="login.subtitle">Obsidian 高速实时同步服务 · 管理后台</div>
 
     <label>
-      <span>服务器地址</span>
-      <input type="text" id="login-server" placeholder="留空默认当前服务器 (自动识别端口)" />
+      <span data-i18n="login.server_label">服务器地址</span>
+      <input type="text" id="login-server" data-i18n-placeholder="login.server_placeholder" placeholder="留空默认当前服务器 (自动识别端口)" />
     </label>
     <label>
-      <span>用户名</span>
+      <span data-i18n="login.username_label">用户名</span>
       <input type="text" id="login-username" required autocomplete="username" />
     </label>
     <label>
-      <span>密码</span>
+      <span data-i18n="login.password_label">密码</span>
       <input type="password" id="login-password" required autocomplete="current-password" />
     </label>
 
     <div id="login-error" class="error-msg"></div>
-    <button type="submit" class="primary">登录</button>
+    <button type="submit" class="primary" data-i18n="login.submit_btn">登录</button>
   </form>
 </div>
 
@@ -43,20 +76,51 @@
       <span class="brand-badge">Fast Sync</span>
     </div>
     <div class="topbar-center">
-      <button id="topbar-search-btn" class="topbar-search-btn" title="全局快速检索 (Ctrl+K)">
+      <button id="topbar-search-btn" class="topbar-search-btn" data-i18n-title="topbar.search_title" title="全局快速检索 (Ctrl+K)">
         <span>🔍</span>
-        <span class="search-placeholder">全局检索笔记与内容...</span>
-        <kbd class="shortcut-kbd">Ctrl K</kbd>
+        <span class="search-placeholder" data-i18n="topbar.search_placeholder">全局检索笔记与内容...</span>
+        <kbd class="shortcut-kbd" data-i18n="topbar.search_shortcut">Ctrl K</kbd>
       </button>
-      <div class="sync-indicator" id="hub-status-indicator" title="实时同步服务运行中">
+      <div class="sync-indicator" id="hub-status-indicator" data-i18n-title="topbar.sync_title" title="实时同步服务运行中">
         <span class="status-dot"></span>
-        <span class="status-text" id="hub-status-text">同步服务就绪</span>
+        <span class="status-text" id="hub-status-text" data-i18n="topbar.sync_ready">同步服务就绪</span>
       </div>
     </div>
     <div class="who">
+      <!-- Language Switcher Selector -->
+      <div class="lang-picker-wrap" id="lang-picker-container">
+        <button id="lang-menu-btn" class="lang-menu-btn" data-i18n-title="topbar.lang_title" title="切换语言 / Language">
+          <span id="lang-current-flag">🇨🇳</span>
+          <span id="lang-label-name">简体中文</span>
+          <span style="font-size:10px;opacity:0.7;">▼</span>
+        </button>
+        <div id="lang-dropdown-menu" class="lang-dropdown-menu hidden">
+          <button class="lang-opt-item" data-lang-val="zh-CN">
+            <span>🇨🇳</span>
+            <span>简体中文</span>
+          </button>
+          <button class="lang-opt-item" data-lang-val="zh-TW">
+            <span>🇭🇰</span>
+            <span>繁體中文</span>
+          </button>
+          <button class="lang-opt-item" data-lang-val="en">
+            <span>🇺🇸</span>
+            <span>English</span>
+          </button>
+          <button class="lang-opt-item" data-lang-val="ko">
+            <span>🇰🇷</span>
+            <span>한국어</span>
+          </button>
+          <button class="lang-opt-item" data-lang-val="ja">
+            <span>🇯🇵</span>
+            <span>日本語</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Theme Switcher Selector -->
       <div class="theme-picker-wrap" id="theme-picker-container">
-        <button id="theme-menu-btn" class="theme-menu-btn" title="切换后台主题与配色">
+        <button id="theme-menu-btn" class="theme-menu-btn" data-i18n-title="topbar.theme_title" title="切换后台主题与配色">
           <span class="theme-color-dot" id="theme-color-dot"></span>
           <span id="theme-label-name">默认科技蓝</span>
           <span style="font-size:10px;opacity:0.7;">▼</span>
@@ -64,38 +128,38 @@
         <div id="theme-dropdown-menu" class="theme-dropdown-menu hidden">
           <button class="theme-opt-item" data-theme-val="default">
             <span class="dot" style="background:#58a6ff;box-shadow:0 0 6px #58a6ff;"></span>
-            <span>经典科技蓝 (默认)</span>
+            <span data-i18n="theme.default">经典科技蓝 (默认)</span>
           </button>
           <button class="theme-opt-item" data-theme-val="obsidian">
             <span class="dot" style="background:#9d7cd8;box-shadow:0 0 6px #9d7cd8;"></span>
-            <span>Obsidian 紫魅夜</span>
+            <span data-i18n="theme.obsidian">Obsidian 紫魅夜</span>
           </button>
           <button class="theme-opt-item" data-theme-val="emerald">
             <span class="dot" style="background:#10b981;box-shadow:0 0 6px #10b981;"></span>
-            <span>翡翠极光绿</span>
+            <span data-i18n="theme.emerald">翡翠极光绿</span>
           </button>
           <button class="theme-opt-item" data-theme-val="azure">
             <span class="dot" style="background:#0284c7;box-shadow:0 0 6px #0284c7;"></span>
-            <span>深海蔚蓝</span>
+            <span data-i18n="theme.azure">深海蔚蓝</span>
           </button>
           <button class="theme-opt-item" data-theme-val="rose">
             <span class="dot" style="background:#e11d48;box-shadow:0 0 6px #e11d48;"></span>
-            <span>琥珀丝绒红</span>
+            <span data-i18n="theme.rose">琥珀丝绒红</span>
           </button>
           <button class="theme-opt-item" data-theme-val="mono">
             <span class="dot" style="background:#ffffff;box-shadow:0 0 6px #ffffff;"></span>
-            <span>OLED 纯黑极简</span>
+            <span data-i18n="theme.mono">OLED 纯黑极简</span>
           </button>
           <button class="theme-opt-item" data-theme-val="light">
             <span class="dot" style="background:#2563eb;"></span>
-            <span>明亮白昼 (Light)</span>
+            <span data-i18n="theme.light">明亮白昼 (Light)</span>
           </button>
         </div>
       </div>
 
       <span id="who-username" class="user-pill"></span>
       <span id="who-role" class="badge"></span>
-      <button id="logout-btn" class="ghost">退出</button>
+      <button id="logout-btn" class="ghost" data-i18n="topbar.logout">退出</button>
     </div>
   </header>
 
@@ -103,32 +167,32 @@
     <nav class="sidebar">
       <div class="sidebar-body">
         <div class="sidebar-header">
-          <div class="nav-section-title">我的 Vaults</div>
-          <button id="new-vault-btn" class="btn-icon" title="新建 Vault">+</button>
+          <div class="nav-section-title" data-i18n="sidebar.my_vaults">我的 Vaults</div>
+          <button id="new-vault-btn" class="btn-icon" data-i18n-title="sidebar.new_vault" title="新建 Vault">+</button>
         </div>
         <ul id="vault-list" class="vault-list"></ul>
 
-        <div class="nav-section-title" style="margin-top:24px">快捷工具</div>
+        <div class="nav-section-title" style="margin-top:24px" data-i18n="sidebar.quick_tools">快捷工具</div>
         <ul class="nav-menu">
-          <li><button class="nav-item tab-btn" id="global-settings-btn" data-tab="settings">⚙️ 设置</button></li>
-          <li><button class="nav-item tab-btn" data-tab="devices">📱 接入设备管理</button></li>
-          <li><button class="nav-item" id="global-connect-btn">⚡ Obsidian 连接指引</button></li>
-          <li><button class="nav-item" id="global-mcp-btn">🤖 AI / MCP 接口配置</button></li>
-          <li><button class="nav-item" id="global-docs-btn">📖 REST API 开发者文档</button></li>
-          <li><button class="nav-item tab-btn" id="global-sponsor-btn" data-tab="sponsor">❤️ 支持该项目</button></li>
+          <li><button class="nav-item tab-btn" id="global-settings-btn" data-tab="settings" data-i18n="sidebar.settings">⚙️ 设置</button></li>
+          <li><button class="nav-item tab-btn" data-tab="devices" data-i18n="sidebar.devices">📱 接入设备管理</button></li>
+          <li><button class="nav-item" id="global-connect-btn" data-i18n="sidebar.connect_guide">⚡ Obsidian 连接指引</button></li>
+          <li><button class="nav-item" id="global-mcp-btn" data-i18n="sidebar.mcp_config">🤖 AI / MCP 接口配置</button></li>
+          <li><button class="nav-item" id="global-docs-btn" data-i18n="sidebar.api_docs">📖 REST API 开发者文档</button></li>
+          <li><button class="nav-item tab-btn" id="global-sponsor-btn" data-tab="sponsor" data-i18n="sidebar.sponsor">❤️ 支持该项目</button></li>
         </ul>
 
         <div id="admin-nav" class="hidden">
-          <div class="nav-section-title" style="margin-top:24px">系统管理</div>
+          <div class="nav-section-title" style="margin-top:24px" data-i18n="sidebar.admin_section">系统管理</div>
           <ul class="nav-menu">
-            <li><button class="tab-btn" data-tab="settings">⚙️ 设置</button></li>
-            <li><button class="tab-btn" data-tab="database">🗄️ 数据库管理</button></li>
-            <li><button class="tab-btn" data-tab="webhooks">🔔 Webhook 告警</button></li>
-            <li><button class="tab-btn" data-tab="synclogs">📋 同步日志</button></li>
-            <li><button class="tab-btn" data-tab="devices">📱 全局设备</button></li>
-            <li><button class="tab-btn" data-tab="users">👥 用户管理</button></li>
-            <li><button class="tab-btn" data-tab="all-vaults">📚 全局 Vault</button></li>
-            <li><button class="tab-btn" data-tab="sponsor">❤️ 赞助支持</button></li>
+            <li><button class="tab-btn" data-tab="settings" data-i18n="sidebar.settings">⚙️ 设置</button></li>
+            <li><button class="tab-btn" data-tab="database" data-i18n="sidebar.database">🗄️ 数据库管理</button></li>
+            <li><button class="tab-btn" data-tab="webhooks" data-i18n="sidebar.webhooks">🔔 Webhook 告警</button></li>
+            <li><button class="tab-btn" data-tab="synclogs" data-i18n="sidebar.synclogs">📋 同步日志</button></li>
+            <li><button class="tab-btn" data-tab="devices" data-i18n="sidebar.all_devices">📱 全局设备</button></li>
+            <li><button class="tab-btn" data-tab="users" data-i18n="sidebar.users">👥 用户管理</button></li>
+            <li><button class="tab-btn" data-tab="all-vaults" data-i18n="sidebar.all_vaults">📚 全局 Vault</button></li>
+            <li><button class="tab-btn" data-tab="sponsor" data-i18n="sidebar.sponsor_admin">❤️ 赞助支持</button></li>
           </ul>
         </div>
       </div>
@@ -140,14 +204,14 @@
           </svg>
           <span>GitHub</span>
         </a>
-        <div class="sidebar-version-badge" title="当前版本">v1.2.0</div>
+        <div class="sidebar-version-badge" data-i18n-title="sidebar.version" title="当前版本">v1.2.0</div>
       </div>
     </nav>
 
     <main class="main" id="main-panel">
       <div class="empty-state">
         <div style="font-size:48px;margin-bottom:12px;">📓</div>
-        <p>从左侧选择一个 Vault 开始管理，或新建一个 Vault 进行 Obsidian 同步</p>
+        <p data-i18n="empty.welcome_desc">从左侧选择一个 Vault 开始管理，或新建一个 Vault 进行 Obsidian 同步</p>
       </div>
     </main>
   </div>
@@ -158,6 +222,7 @@
   <div id="modal-container" class="modal-container"></div>
 </div>
 
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

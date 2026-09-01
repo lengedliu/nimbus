@@ -43,6 +43,19 @@
   const modalBackdrop = $('#modal-backdrop');
   const modalContainer = $('#modal-container');
 
+  const t = (key, fallback, params) => {
+    if (window.i18n && window.i18n.t) {
+      return window.i18n.t(key, fallback, params);
+    }
+    return fallback !== undefined ? fallback : key;
+  };
+
+  const translate = (root) => {
+    if (window.i18n && window.i18n.translateDOM) {
+      window.i18n.translateDOM(root || mainPanel);
+    }
+  };
+
   const THEME_LABELS = {
     default: '经典科技蓝',
     obsidian: 'Obsidian 紫魅夜',
@@ -78,7 +91,8 @@
     const key = themeKey || localStorage.getItem('nimbus_theme') || 'default';
     const label = $('#theme-label-name');
     const dot = $('#theme-color-dot');
-    if (label) label.textContent = THEME_LABELS[key] || '经典科技蓝';
+    const themeName = (window.t ? window.t(`theme.${key}`) : null) || THEME_LABELS[key] || '经典科技蓝';
+    if (label) label.textContent = themeName;
     if (dot) {
       dot.style.backgroundColor = THEME_DOT_COLORS[key] || '#58a6ff';
       dot.style.boxShadow = `0 0 6px ${THEME_DOT_COLORS[key] || '#58a6ff'}`;
@@ -96,6 +110,9 @@
     menuBtn.onclick = (e) => {
       e.stopPropagation();
       menu.classList.toggle('hidden');
+      // Close lang dropdown if open
+      const langMenu = document.getElementById('lang-dropdown-menu');
+      if (langMenu) langMenu.classList.add('hidden');
     };
 
     document.addEventListener('click', (e) => {
@@ -110,7 +127,8 @@
         const val = item.dataset.themeVal;
         applyTheme(val);
         menu.classList.add('hidden');
-        toast(`已切换至「${THEME_LABELS[val]}」风格`);
+        const name = (window.t ? window.t(`theme.${val}`) : null) || THEME_LABELS[val];
+        toast(`已切换至「${name}」风格`);
       };
     });
 
@@ -220,6 +238,7 @@
         </div>
       `;
 
+      translate(backdrop);
       document.body.appendChild(backdrop);
 
       let closed = false;
@@ -278,6 +297,8 @@
     modalBackdrop.onclick = (e) => {
       if (e.target === modalBackdrop) closeModal();
     };
+
+    translate(modalContainer);
 
     if (onMount) onMount(modalContainer);
   }
@@ -401,7 +422,10 @@
     appView.classList.remove('hidden');
     initThemeSwitcher();
     $('#who-username').textContent = state.user.username;
-    $('#who-role').textContent = state.user.role;
+    const roleText = state.user.role === 'admin'
+      ? (window.t ? window.t('topbar.role_admin', '管理员') : '管理员')
+      : (window.t ? window.t('topbar.role_user', '普通用户') : '普通用户');
+    $('#who-role').textContent = roleText;
     if (state.user.role === 'admin') $('#admin-nav').classList.remove('hidden');
 
     document.querySelectorAll('.tab-btn').forEach((btn) =>
@@ -1097,6 +1121,8 @@
     else if (state.activeSubtab === 'shares') renderSharesSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'rules') renderRulesSubtab(vaultId, contentBox);
     else if (state.activeSubtab === 'trash') renderTrashSubtab(vaultId, contentBox);
+
+    translate(mainPanel);
   }
 
   // --------------------------- Subtab: Files ---------------------------------
@@ -1197,6 +1223,7 @@
     container.appendChild(listContainer);
 
     renderFileList(vaultId, listContainer);
+    translate(container);
   }
 
   function buildFileTree(paths, manifest) {
@@ -1291,6 +1318,7 @@
 
     if (paths.length === 0) {
       listWrapper.innerHTML = '<div class="empty-state">没有符合条件的文件</div>';
+      translate(listWrapper);
       return;
     }
 
@@ -1299,6 +1327,7 @@
     } else {
       renderFlatFileList(vaultId, listWrapper, paths, state.manifest);
     }
+    translate(listWrapper);
   }
 
   function renderTreeFileList(vaultId, listWrapper, paths, manifest) {
@@ -1685,6 +1714,7 @@
   function renderSearchResultsTable(vaultId, container, results) {
     if (results.length === 0) {
       container.innerHTML = '<div class="empty-state">未找到包含此关键词的笔记</div>';
+      translate(container);
       return;
     }
 
@@ -1723,6 +1753,7 @@
       tbody.appendChild(tr);
     }
     container.appendChild(table);
+    translate(container);
   }
 
   window.nimbusOpenFile = (vaultId, encPath) => {
@@ -1836,6 +1867,7 @@
       `;
       listEl.appendChild(li);
     }
+    translate(container);
   }
 
   // --------------------------- Subtab: Public Shares -------------------------
@@ -1919,6 +1951,7 @@
       tbody.appendChild(tr);
     }
     wrap.appendChild(table);
+    translate(container);
   }
 
   function showCreateShareModal(vaultId, filePath) {
@@ -2213,8 +2246,10 @@
           };
         });
       }
+      translate(container);
     } catch (err) {
       container.innerHTML = `<div class="empty-state">加载权限配置失败: ${escapeHtml(err.message)}</div>`;
+      translate(container);
     }
   }
 
@@ -2261,6 +2296,7 @@
         toast('保存失败: ' + e.message);
       }
     };
+    translate(container);
   }
 
   // --------------------------- Subtab: Trash ---------------------------------
@@ -2360,6 +2396,7 @@
       tbody.appendChild(tr);
     }
     wrap.appendChild(table);
+    translate(container);
   }
 
   // --------------------------- Subtab: Conflicts Resolution Center -----------
@@ -2591,6 +2628,7 @@
     } catch (err) {
       container.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载冲突解决中心失败: ${escapeHtml(err.message)}</div>`;
     }
+    translate(container);
   }
 
   // --------------------------- Subtab: Backups & Snapshots -------------------
@@ -2716,8 +2754,10 @@
       }
 
       wrap.appendChild(table);
+      translate(container);
     } catch (err) {
       container.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载快照列表失败: ${escapeHtml(err.message)}</div>`;
+      translate(container);
     }
   }
 
@@ -3113,8 +3153,10 @@
           }
         };
       }
+      translate(container);
     } catch (err) {
       container.innerHTML = `<div class="empty-state" style="color:var(--danger);">读取 Git 状态失败: ${escapeHtml(err.message)}</div>`;
+      translate(container);
     }
   }
 
@@ -3268,6 +3310,7 @@
         `;
         tbody.appendChild(tr);
       }
+      translate(container);
     }
 
     await loadLogs();
@@ -3393,6 +3436,7 @@
       const tbody = mainPanel.querySelector('#admin-logs-tbody');
       if (logs.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">暂无符合条件的全局同步日志</td></tr>`;
+        translate(mainPanel);
         return;
       }
 
@@ -3425,6 +3469,7 @@
         `;
         tbody.appendChild(tr);
       }
+      translate(mainPanel);
     }
 
     await loadLogs();
@@ -3564,6 +3609,7 @@
             toast('保存失败: ' + e.message);
           }
         };
+        translate(mainPanel);
         return;
       }
 
@@ -3605,6 +3651,7 @@
       body.appendChild(previewPane);
       layout.appendChild(body);
       mainPanel.appendChild(layout);
+      translate(mainPanel);
 
       // Event handlers
       let showPreview = true;
@@ -3664,6 +3711,7 @@
 
     layout.querySelector('#media-back-btn').onclick = () => openVault(vaultId, 'files');
     mainPanel.appendChild(layout);
+    translate(mainPanel);
   }
 
   async function saveFile(vaultId, path, content, baseHash) {
@@ -3758,6 +3806,7 @@
 
         itemsWrap.appendChild(row);
       }
+      translate(dialog);
     });
   }
 
@@ -4054,6 +4103,7 @@
       tbody.appendChild(tr);
     }
     wrap.appendChild(table);
+    translate(mainPanel);
   }
 
   // --------------------------- Modal: Edit User & Vault Permissions ----------
@@ -4137,6 +4187,7 @@
     `;
 
     document.body.appendChild(modal);
+    translate(modal);
 
     const close = () => modal.remove();
     modal.querySelector('#modal-close-btn').onclick = close;
@@ -4189,6 +4240,7 @@
           `;
         }).join('');
       }
+      translate(modal);
 
       modal.querySelector('#modal-save-btn').onclick = async () => {
         const password = modal.querySelector('#eu-password').value;
@@ -4227,6 +4279,7 @@
       };
     } catch (e) {
       modal.querySelector('#modal-vaults-content').innerHTML = `<div class="empty-state">加载失败: ${escapeHtml(e.message)}</div>`;
+      translate(modal);
     }
   }
 
@@ -4276,6 +4329,7 @@
       tbody.appendChild(tr);
     }
     wrap.appendChild(table);
+    translate(mainPanel);
   }
 
   // --------------------------- Database Management --------------------------
@@ -4577,6 +4631,7 @@
         }
       };
     }
+    translate(mainPanel);
   }
 
   // --------------------------- Devices Management Panel ---------------------
@@ -4652,6 +4707,7 @@
             }
           };
         });
+        translate(mainPanel);
         return;
       }
 
@@ -4743,6 +4799,7 @@
 
         grid.appendChild(card);
       }
+      translate(mainPanel);
     } catch (err) {
       mainPanel.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载设备管理失败: ${escapeHtml(err.message)}</div>`;
     }
@@ -5114,6 +5171,7 @@
           toast('保存失败: ' + e.message);
         }
       };
+      translate(mainPanel);
     } catch (err) {
       mainPanel.innerHTML = `<div class="empty-state" style="color:#e74c3c;">加载 Webhook 配置失败: ${escapeHtml(err.message)}</div>`;
     }
@@ -6585,18 +6643,68 @@
     } else if (subTab === 'account') {
       // 5. Account, appearance & password management tab
       const currentTheme = localStorage.getItem('nimbus_theme') || 'default';
+      const currentLang = (window.i18n ? window.i18n.currentLang : (localStorage.getItem('nimbus_lang') || 'zh-CN'));
+      const t = window.t || ((k, def) => def || k);
+
       container.innerHTML = `
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3><span>🎨</span> 后台管理界面主题风格与配色</h3>
-            <p>选择您喜欢的后台配色风格，支持实时切换并自动保存偏好</p>
+            <h3><span>🌐</span> ${t('settings.lang_title', '系统多语言设置 / Language')}</h3>
+            <p>${t('settings.lang_desc', '选择您使用的界面显示语言，支持即时切换并持久化保存')}</p>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:12px;margin-bottom:28px;">
+            <div class="lang-card-picker ${currentLang === 'zh-CN' ? 'selected' : ''}" data-val="zh-CN" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentLang === 'zh-CN' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span style="font-size:20px;flex-shrink:0;">🇨🇳</span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">简体中文</div>
+                <div style="font-size:11px;color:var(--muted)">Simplified Chinese</div>
+              </div>
+            </div>
+
+            <div class="lang-card-picker ${currentLang === 'zh-TW' ? 'selected' : ''}" data-val="zh-TW" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentLang === 'zh-TW' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span style="font-size:20px;flex-shrink:0;">🇭🇰</span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">繁體中文</div>
+                <div style="font-size:11px;color:var(--muted)">Traditional Chinese</div>
+              </div>
+            </div>
+
+            <div class="lang-card-picker ${currentLang === 'en' ? 'selected' : ''}" data-val="en" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentLang === 'en' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span style="font-size:20px;flex-shrink:0;">🇺🇸</span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">English</div>
+                <div style="font-size:11px;color:var(--muted)">International English</div>
+              </div>
+            </div>
+
+            <div class="lang-card-picker ${currentLang === 'ko' ? 'selected' : ''}" data-val="ko" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentLang === 'ko' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span style="font-size:20px;flex-shrink:0;">🇰🇷</span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">한국어</div>
+                <div style="font-size:11px;color:var(--muted)">Korean</div>
+              </div>
+            </div>
+
+            <div class="lang-card-picker ${currentLang === 'ja' ? 'selected' : ''}" data-val="ja" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentLang === 'ja' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
+              <span style="font-size:20px;flex-shrink:0;">🇯🇵</span>
+              <div>
+                <div style="font-weight:600;font-size:13px;">日本語</div>
+                <div style="font-size:11px;color:var(--muted)">Japanese</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-card-header">
+            <h3><span>🎨</span> ${t('settings.theme_title', '后台管理界面主题风格与配色')}</h3>
+            <p>${t('settings.theme_desc', '选择您喜欢的后台配色风格，支持实时切换并自动保存偏好')}</p>
           </div>
 
           <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:12px;margin-bottom:28px;">
             <div class="theme-card-picker ${currentTheme === 'default' ? 'selected' : ''}" data-val="default" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'default' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
               <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px #58a6ff;flex-shrink:0;"></span>
               <div>
-                <div style="font-weight:600;font-size:13px;">经典科技蓝</div>
+                <div style="font-weight:600;font-size:13px;">${t('theme.default', '经典科技蓝')}</div>
                 <div style="font-size:11px;color:var(--muted)">默认深色极客风</div>
               </div>
             </div>
@@ -6604,7 +6712,7 @@
             <div class="theme-card-picker ${currentTheme === 'obsidian' ? 'selected' : ''}" data-val="obsidian" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'obsidian' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
               <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#9d7cd8;box-shadow:0 0 8px #9d7cd8;flex-shrink:0;"></span>
               <div>
-                <div style="font-weight:600;font-size:13px;">Obsidian 紫魅夜</div>
+                <div style="font-weight:600;font-size:13px;">${t('theme.obsidian', 'Obsidian 紫魅夜')}</div>
                 <div style="font-size:11px;color:var(--muted)">Obsidian 官方经典紫</div>
               </div>
             </div>
@@ -6612,7 +6720,7 @@
             <div class="theme-card-picker ${currentTheme === 'emerald' ? 'selected' : ''}" data-val="emerald" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'emerald' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
               <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;flex-shrink:0;"></span>
               <div>
-                <div style="font-weight:600;font-size:13px;">翡翠极光绿</div>
+                <div style="font-weight:600;font-size:13px;">${t('theme.emerald', '翡翠极光绿')}</div>
                 <div style="font-size:11px;color:var(--muted)">深邃护眼森系绿</div>
               </div>
             </div>
@@ -6620,7 +6728,7 @@
             <div class="theme-card-picker ${currentTheme === 'azure' ? 'selected' : ''}" data-val="azure" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'azure' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
               <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#0284c7;box-shadow:0 0 8px #0284c7;flex-shrink:0;"></span>
               <div>
-                <div style="font-weight:600;font-size:13px;">深海蔚蓝</div>
+                <div style="font-weight:600;font-size:13px;">${t('theme.azure', '深海蔚蓝')}</div>
                 <div style="font-size:11px;color:var(--muted)">清澈深蓝海洋风</div>
               </div>
             </div>
@@ -6628,7 +6736,7 @@
             <div class="theme-card-picker ${currentTheme === 'rose' ? 'selected' : ''}" data-val="rose" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'rose' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
               <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#e11d48;box-shadow:0 0 8px #e11d48;flex-shrink:0;"></span>
               <div>
-                <div style="font-weight:600;font-size:13px;">琥珀丝绒红</div>
+                <div style="font-weight:600;font-size:13px;">${t('theme.rose', '琥珀丝绒红')}</div>
                 <div style="font-size:11px;color:var(--muted)">暖意轻奢丝绒酒红</div>
               </div>
             </div>
@@ -6636,7 +6744,7 @@
             <div class="theme-card-picker ${currentTheme === 'mono' ? 'selected' : ''}" data-val="mono" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'mono' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
               <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#ffffff;box-shadow:0 0 8px #ffffff;flex-shrink:0;"></span>
               <div>
-                <div style="font-weight:600;font-size:13px;">OLED 纯黑极简</div>
+                <div style="font-weight:600;font-size:13px;">${t('theme.mono', 'OLED 纯黑极简')}</div>
                 <div style="font-size:11px;color:var(--muted)">纯黑超高对比度</div>
               </div>
             </div>
@@ -6644,7 +6752,7 @@
             <div class="theme-card-picker ${currentTheme === 'light' ? 'selected' : ''}" data-val="light" style="cursor:pointer;padding:12px;background:var(--panel-2);border:1px solid ${currentTheme === 'light' ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);display:flex;align-items:center;gap:10px;">
               <span class="dot" style="width:14px;height:14px;border-radius:50%;background:#2563eb;flex-shrink:0;"></span>
               <div>
-                <div style="font-weight:600;font-size:13px;">明亮白昼 (Light)</div>
+                <div style="font-weight:600;font-size:13px;">${t('theme.light', '明亮白昼 (Light)')}</div>
                 <div style="font-size:11px;color:var(--muted)">清新日间高清晰</div>
               </div>
             </div>
@@ -6659,7 +6767,7 @@
             <span style="color:var(--muted)">当前登录用户:</span>
             <span><b>${escapeHtml(state.user?.username)}</b></span>
             <span style="color:var(--muted)">权限角色:</span>
-            <span><span class="badge">${state.user?.role === 'admin' ? '系统管理员' : '标准用户'}</span></span>
+            <span><span class="badge">${state.user?.role === 'admin' ? (t('topbar.role_admin', '系统管理员')) : (t('topbar.role_user', '标准用户'))}</span></span>
             <span style="color:var(--muted)">用户 ID:</span>
             <code style="font-size:12px">${state.user?.id || 'N/A'}</code>
           </div>
@@ -6690,12 +6798,24 @@
         </div>
       `;
 
+      // Bind Lang Cards in settings
+      container.querySelectorAll('.lang-card-picker').forEach((card) => {
+        card.addEventListener('click', () => {
+          const val = card.dataset.val;
+          if (window.i18n) {
+            window.i18n.setLanguage(val);
+          }
+          renderSettingsPanel('account');
+        });
+      });
+
       // Bind Theme Cards in settings
       container.querySelectorAll('.theme-card-picker').forEach((card) => {
         card.addEventListener('click', () => {
           const val = card.dataset.val;
           applyTheme(val);
-          toast(`已切换至「${THEME_LABELS[val]}」风格`);
+          const name = (window.t ? window.t(`theme.${val}`) : null) || THEME_LABELS[val];
+          toast(`已切换至「${name}」风格`);
           renderSettingsPanel('account');
         });
       });
@@ -6735,6 +6855,7 @@
         }
       });
     }
+    translate(mainPanel);
   }
 
   // --------------------------- Sponsor & Support Project Panel ---------------
@@ -7130,6 +7251,7 @@
         editConfigBtn.onclick = () => openEditSponsorConfigModal(config);
       }
     }
+    translate(mainPanel);
   }
 
   function openAddSponsorModal() {
@@ -7431,8 +7553,78 @@
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  // --------------------------- Boot ------------------------------------------
+  // --------------------------- Language & Boot -------------------------------
 
+  function initLanguageDropdowns() {
+    // Topbar Lang Menu
+    const langBtn = $('#lang-menu-btn');
+    const langMenu = $('#lang-dropdown-menu');
+    if (langBtn && langMenu) {
+      langBtn.onclick = (e) => {
+        e.stopPropagation();
+        langMenu.classList.toggle('hidden');
+        const themeMenu = $('#theme-dropdown-menu');
+        if (themeMenu) themeMenu.classList.add('hidden');
+      };
+
+      document.querySelectorAll('#lang-dropdown-menu .lang-opt-item').forEach((item) => {
+        item.onclick = (e) => {
+          e.stopPropagation();
+          const val = item.dataset.langVal;
+          if (window.i18n) window.i18n.setLanguage(val);
+          langMenu.classList.add('hidden');
+        };
+      });
+    }
+
+    // Login Screen Lang Menu
+    const loginLangBtn = $('#login-lang-btn');
+    const loginLangMenu = $('#login-lang-dropdown');
+    if (loginLangBtn && loginLangMenu) {
+      loginLangBtn.onclick = (e) => {
+        e.stopPropagation();
+        loginLangMenu.classList.toggle('hidden');
+      };
+
+      document.querySelectorAll('#login-lang-dropdown .lang-opt-item').forEach((item) => {
+        item.onclick = (e) => {
+          e.stopPropagation();
+          const val = item.dataset.langVal;
+          if (window.i18n) window.i18n.setLanguage(val);
+          loginLangMenu.classList.add('hidden');
+        };
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (langMenu && !langMenu.contains(e.target) && e.target !== langBtn) {
+        langMenu.classList.add('hidden');
+      }
+      if (loginLangMenu && !loginLangMenu.contains(e.target) && e.target !== loginLangBtn) {
+        loginLangMenu.classList.add('hidden');
+      }
+    });
+  }
+
+  // Handle global language changes
+  window.addEventListener('languageChanged', (e) => {
+    updateThemeUI();
+    if (state.user) {
+      const roleText = state.user.role === 'admin'
+        ? (window.t ? window.t('topbar.role_admin', '管理员') : '管理员')
+        : (window.t ? window.t('topbar.role_user', '普通用户') : '普通用户');
+      const roleElem = $('#who-role');
+      if (roleElem) roleElem.textContent = roleText;
+    }
+    renderVaultList();
+    if (state.activeVaultId) {
+      renderVaultContainer(state.activeVaultId);
+    } else if (state.activeTab) {
+      showTab(state.activeTab);
+    }
+  });
+
+  initLanguageDropdowns();
   applyTheme();
 
   if (state.token && state.user) {
