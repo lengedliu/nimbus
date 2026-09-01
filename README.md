@@ -209,3 +209,17 @@ Nimbus 原生内置了 **StreamableHTTP** 协议的 MCP 接口，AI 客户端（
 1. **强密钥**：请务必将 `.env` 中的 `JWT_SECRET` 设置为随机强字符串。
 2. **反向代理与 HTTPS**：生产环境中推荐在 Nginx、Caddy 或 Cloudflare 后面运行，启用 HTTPS/WSS。
 3. **数据备份**：所有笔记和系统数据存储在 `./data` 目录下，定期备份此目录或通过 Web 后台「一键备份」即可完整保留数据。
+
+---
+
+## 💖 Sponsorship & Support / 赞助与支持
+
+- If you find this project useful and would like it to continue development, please support us in the following ways. Thank you for supporting open-source software!
+- 如果您觉得本项目对您有所帮助并希望它持续迭代与更新，欢迎通过以下方式赞助支持作者，感谢您对开源软件的认可与鼓励：
+
+| Ko-fi *Non-China Region* | | WeChat Pay *China Region* |
+| :---: | :---: | :---: |
+| <a href="https://ko-fi.com/lengedliu" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" width="220" alt="Support me on Ko-fi" /></a> | or | <img src="./public/wechat-reward.jpg" width="190" alt="WeChat Pay 微信打赏" /> |
+
+---
+
