@@ -23,7 +23,7 @@ const ask = (q) => new Promise((resolve) => rl.question(q, resolve));
   }
 
   try {
-    const user = users.createUser(username, password, roleInput === 'admin' ? 'admin' : undefined);
+    const user = await users.createUser(username, password, roleInput === 'admin' ? 'admin' : undefined);
     console.log(`Created user "${user.username}" (id: ${user.id}, role: ${user.role})`);
     setTimeout(() => process.exit(0), 500);
   } catch (e) {

@@ -35,7 +35,7 @@ router.put('/', (req, res) => {
 });
 
 // POST /api/settings/change-password - modify own password
-router.post('/change-password', (req, res) => {
+router.post('/change-password', async (req, res) => {
   const { oldPassword, newPassword } = req.body || {};
   if (!oldPassword || !newPassword) {
     return res.status(400).json({ error: '请输入原密码与新密码' });
@@ -44,13 +44,13 @@ router.post('/change-password', (req, res) => {
     return res.status(400).json({ error: '新密码长度至少需要4位' });
   }
 
-  const verified = users.verifyPassword(req.user.username, oldPassword);
+  const verified = await users.verifyPassword(req.user.username, oldPassword);
   if (!verified) {
     return res.status(400).json({ error: '原密码验证不正确' });
   }
 
   try {
-    users.updatePassword(req.user.id, newPassword);
+    await users.updatePassword(req.user.id, newPassword);
     res.json({ ok: true, message: '密码修改成功，请牢记新密码' });
   } catch (err) {
     res.status(500).json({ error: err.message });

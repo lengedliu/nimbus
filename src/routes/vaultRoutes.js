@@ -41,15 +41,18 @@ router.get('/:vaultId/manifest', (req, res) => {
 });
 
 // GET /api/vaults/search?q=keyword - Global search across all accessible vaults (filename and note contents)
-router.get('/search', (req, res) => {
+router.get('/search', async (req, res) => {
   const { q } = req.query;
   if (!q || !q.trim()) return res.json({ results: [] });
   const isAdmin = req.user.role === 'admin';
   const userVaults = vaults.listForUser(req.user.id, isAdmin);
   const results = [];
 
+  // 依次搜索每个 vault（而不是 Promise.all 并发跑全部）：
+  // searchVault 内部本来就会周期性让出事件循环，顺序执行既能避免多个大 vault
+  // 同时抢事件循环导致互相拖慢，也让"让出"的间隙能真正被其他请求利用到。
   for (const v of userVaults) {
-    const matches = storage.searchVault(v.id, q.trim(), 50);
+    const matches = await storage.searchVault(v.id, q.trim(), 50);
     for (const m of matches) {
       results.push({
         vaultId: v.id,
@@ -68,14 +71,14 @@ router.get('/search', (req, res) => {
 });
 
 // GET /api/vaults/:vaultId/search?q=keyword - Vault-level search
-router.get('/:vaultId/search', (req, res) => {
+router.get('/:vaultId/search', async (req, res) => {
   const { vaultId } = req.params;
   const { q } = req.query;
   const isAdmin = req.user.role === 'admin';
   if (!vaults.hasReadAccess(req.user.id, vaultId, isAdmin)) {
     return res.status(404).json({ error: 'Not found or no read permission' });
   }
-  const results = storage.searchVault(vaultId, q || '', 50);
+  const results = await storage.searchVault(vaultId, q || '', 50);
   res.json({ results });
 });
 

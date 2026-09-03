@@ -123,11 +123,11 @@ router.get('/:vaultId/stats', (req, res) => {
 
 // ---------------------------------- search ---------------------------------------
 
-router.get('/:vaultId/search', (req, res) => {
+router.get('/:vaultId/search', async (req, res) => {
   if (!checkAccess(req, res, false)) return;
   const { vaultId } = req.params;
   const { q } = req.query;
-  const results = storage.searchVault(vaultId, q);
+  const results = await storage.searchVault(vaultId, q);
   res.json({ results });
 });
 

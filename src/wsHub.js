@@ -156,6 +156,11 @@ class FnsHub {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
   }
 
+  /** 把已经序列化好的字符串发给一个客户端，避免每个客户端都重新 JSON.stringify 一次。 */
+  _sendRaw(ws, json) {
+    if (ws.readyState === ws.OPEN) ws.send(json);
+  }
+
   _onMessage(client, vaultId, raw) {
     let msg;
     try {
@@ -338,9 +343,12 @@ class FnsHub {
       content: buf.toString('base64'),
       hash: result?.currentHash,
     };
+    // 只序列化一次，广播给房间里所有客户端复用同一份字符串——
+    // 之前是每个客户端都重新 JSON.stringify 一遍同样的内容（文件越大、在线设备越多，浪费越明显）。
+    const json = JSON.stringify(payload);
     for (const client of room) {
       if (excludeWs && client.ws === excludeWs) continue; // don't echo back to the pushing socket
-      this._send(client.ws, payload);
+      this._sendRaw(client.ws, json);
     }
   }
 
@@ -349,9 +357,10 @@ class FnsHub {
     this._logActivity(vaultId, { type: 'delete', path: relPath, userId: fromUserId });
     const room = this.rooms.get(vaultId);
     if (!room || room.size === 0) return;
+    const json = JSON.stringify({ type: 'deleted', path: relPath });
     for (const client of room) {
       if (excludeWs && client.ws === excludeWs) continue; // don't echo back to the deleting socket
-      this._send(client.ws, { type: 'deleted', path: relPath });
+      this._sendRaw(client.ws, json);
     }
   }
 }

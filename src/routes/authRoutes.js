@@ -33,21 +33,25 @@ router.get('/status', (req, res) => {
 
 // Registration is open only for the very first user (bootstrap admin).
 // After that, use `npm run create-user` on the server to add accounts.
-router.post('/register', rateLimitLogin, (req, res) => {
+router.post('/register', rateLimitLogin, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (users.hasAnyUser()) {
     return res.status(403).json({ error: 'Registration closed. Ask the server admin to create your account.' });
   }
-  const user = users.createUser(username, password);
-  const token = signToken(user);
-  res.json({ token, user });
+  try {
+    const user = await users.createUser(username, password);
+    const token = signToken(user);
+    res.json({ token, user });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
-router.post('/login', rateLimitLogin, (req, res) => {
+router.post('/login', rateLimitLogin, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
-  const user = users.verifyPassword(username, password);
+  const user = await users.verifyPassword(username, password);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
   const token = signToken(user);
   res.json({ token, user });

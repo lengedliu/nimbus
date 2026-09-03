@@ -28,7 +28,7 @@ router.get('/vaults/:vaultId/shares', requireAuth, (req, res) => {
   res.json({ shares: list });
 });
 
-router.post('/vaults/:vaultId/shares', requireAuth, (req, res) => {
+router.post('/vaults/:vaultId/shares', requireAuth, async (req, res) => {
   const { vaultId } = req.params;
   if (!vaultsStore.userOwnsVault(req.user.id, vaultId)) {
     return res.status(404).json({ error: 'Not found' });
@@ -40,7 +40,7 @@ router.post('/vaults/:vaultId/shares', requireAuth, (req, res) => {
   const buf = storage.readFile(vaultId, filePath);
   if (buf === null) return res.status(404).json({ error: 'File not found in vault' });
 
-  const record = shares.create({
+  const record = await shares.create({
     vaultId,
     userId: req.user.id,
     filePath,
@@ -64,14 +64,15 @@ router.delete('/vaults/:vaultId/shares/:shareId', requireAuth, (req, res) => {
 
 // --------------------------- Public Share API ---------------------------
 
-router.get('/public/shares/:shareId', (req, res) => {
+router.get('/public/shares/:shareId', async (req, res) => {
   const { shareId } = req.params;
   const share = shares.getById(shareId);
   if (!share) return res.status(404).json({ error: 'Share link not found or expired' });
 
   const password = req.query.password || req.headers['x-share-password'];
   if (share.hasPassword) {
-    if (!password || !shares.verifyPassword(shareId, password)) {
+    const passwordOk = password && (await shares.verifyPassword(shareId, password));
+    if (!passwordOk) {
       return res.status(401).json({
         error: 'Password required',
         needsPassword: true,

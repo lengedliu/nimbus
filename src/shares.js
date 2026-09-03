@@ -66,9 +66,9 @@ function getById(id) {
   return share;
 }
 
-function create({ vaultId, userId, filePath, title, password, expiresDays, allowCopy = true }) {
+async function create({ vaultId, userId, filePath, title, password, expiresDays, allowCopy = true }) {
   const id = randomShareId();
-  const passwordHash = password ? bcrypt.hashSync(password, 10) : null;
+  const passwordHash = password ? await bcrypt.hash(password, 10) : null;
   const expiresAt = expiresDays && expiresDays > 0 ? Date.now() + expiresDays * 24 * 60 * 60 * 1000 : null;
 
   const record = {
@@ -123,10 +123,10 @@ function create({ vaultId, userId, filePath, title, password, expiresDays, allow
   };
 }
 
-function verifyPassword(shareId, password) {
+async function verifyPassword(shareId, password) {
   const share = sharesCache.find((s) => s.id === shareId);
   if (!share || !share.hasPassword || !share.passwordHash) return false;
-  return bcrypt.compareSync(password || '', share.passwordHash);
+  return bcrypt.compare(password || '', share.passwordHash);
 }
 
 function remove(id, userId) {

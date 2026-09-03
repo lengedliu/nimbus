@@ -45,12 +45,12 @@ function findById(id) {
   return usersCache.find((u) => u.id === id);
 }
 
-function createUser(username, password, role) {
+async function createUser(username, password, role) {
   if (findByUsername(username)) {
     throw new Error(`User "${username}" already exists`);
   }
   const isFirstUser = !hasAnyUser();
-  const passwordHash = bcrypt.hashSync(password, 10);
+  const passwordHash = await bcrypt.hash(password, 10);
   const user = {
     id: uuid(),
     username,
@@ -80,17 +80,17 @@ function createUser(username, password, role) {
   return { id: user.id, username: user.username, role: user.role };
 }
 
-function verifyPassword(username, password) {
+async function verifyPassword(username, password) {
   const user = findByUsername(username);
   if (!user) return null;
-  const ok = bcrypt.compareSync(password, user.passwordHash);
+  const ok = await bcrypt.compare(password, user.passwordHash);
   return ok ? { id: user.id, username: user.username, role: user.role || 'user' } : null;
 }
 
-function updatePassword(userId, newPassword) {
+async function updatePassword(userId, newPassword) {
   const user = findById(userId);
   if (!user) throw new Error('User not found');
-  const passwordHash = bcrypt.hashSync(newPassword, 10);
+  const passwordHash = await bcrypt.hash(newPassword, 10);
   user.passwordHash = passwordHash;
 
   if (dbManager.type === 'json') {
@@ -106,7 +106,7 @@ function updatePassword(userId, newPassword) {
   return true;
 }
 
-function updateUser(userId, { password, role }) {
+async function updateUser(userId, { password, role }) {
   const user = findById(userId);
   if (!user) throw new Error('User not found');
 
@@ -115,7 +115,7 @@ function updateUser(userId, { password, role }) {
   }
 
   if (password && password.trim()) {
-    user.passwordHash = bcrypt.hashSync(password, 10);
+    user.passwordHash = await bcrypt.hash(password, 10);
   }
 
   if (dbManager.type === 'json') {

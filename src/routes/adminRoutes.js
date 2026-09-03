@@ -43,7 +43,7 @@ router.post('/users', async (req, res) => {
   const { username, password, role, vaultAssignments } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   try {
-    const user = users.createUser(username, password, role === 'admin' ? 'admin' : 'user');
+    const user = await users.createUser(username, password, role === 'admin' ? 'admin' : 'user');
 
     if (Array.isArray(vaultAssignments) && vaultAssignments.length > 0) {
       for (const item of vaultAssignments) {
@@ -72,7 +72,7 @@ router.put('/users/:userId', async (req, res) => {
   }
 
   try {
-    const updatedUser = users.updateUser(userId, {
+    const updatedUser = await users.updateUser(userId, {
       password: password && password.trim() ? password.trim() : undefined,
       role: role === 'admin' ? 'admin' : (role === 'user' ? 'user' : undefined),
     });

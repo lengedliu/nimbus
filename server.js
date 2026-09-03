@@ -1,11 +1,13 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const { PORT, DATA_DIR, VAULTS_DIR, TLS_CERT_PATH, TLS_KEY_PATH } = require('./src/config');
+const { PORT, DATA_DIR, VAULTS_DIR, TLS_CERT_PATH, TLS_KEY_PATH, TRUST_PROXY } = require('./src/config');
 const authRoutes = require('./src/routes/authRoutes');
 const vaultRoutes = require('./src/routes/vaultRoutes');
 const fileRoutes = require('./src/routes/fileRoutes');
@@ -27,9 +29,11 @@ const settingsManager = require('./src/settings');
 const syncLogger = require('./src/syncLogger');
 const vaultMembers = require('./src/vaultMembers');
 const devicesStore = require('./src/devices');
+const storage = require('./src/storage');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(VAULTS_DIR, { recursive: true });
+storage.cleanupAllStaleUploadTemps();
 
 // Initialize database
 (async () => {
@@ -50,9 +54,25 @@ fs.mkdirSync(VAULTS_DIR, { recursive: true });
 
 const app = express();
 app.set('fnsHub', fnsHub);
+if (TRUST_PROXY) {
+  app.set('trust proxy', 1);
+}
 app.use(cors());
+app.use(compression()); // 文本类响应（JSON/HTML/笔记内容）走 gzip；八进制流的文件下载会被自动跳过
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// 全局限流：保护同步/搜索这类同步阻塞型接口不被单个来源短时间内打爆。
+// 阈值给得比较宽松，正常的 Obsidian 多设备同步不会碰到；
+// 登录接口另有更严格的专用限流（见 authRoutes.js），这里不重复限制登录。
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '请求过于频繁，请稍后再试' },
+});
+app.use('/api', apiLimiter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, name: 'nimbus-server' }));
 app.use('/api/auth', authRoutes);
