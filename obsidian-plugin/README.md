@@ -1,5 +1,10 @@
 # Nimbus Sync — Obsidian 实时同步插件
 
+[![Obsidian](https://img.shields.io/badge/Obsidian-Plugin-7C3AED?style=flat&logo=obsidian&logoColor=white)](https://obsidian.md)
+[![WebSocket](https://img.shields.io/badge/WebSocket-Realtime-010101?style=flat&logo=socketdotio&logoColor=white)](https://github.com/websockets/ws)
+[![Version](https://img.shields.io/badge/Version-v1.1.0-blue?style=flat)](#)
+[![License](https://img.shields.io/badge/License-MIT-F59E0B?style=flat&logo=opensourceinitiative&logoColor=white)](../LICENSE)
+
 专为自托管 **Nimbus Server** 定制的 Obsidian 双向实时同步插件。
 
 ## 功能特性
