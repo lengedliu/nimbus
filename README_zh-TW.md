@@ -11,7 +11,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
 [![License](https://img.shields.io/badge/License-MIT-F59E0B?style=flat&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
-**Nimbus Vault Sync**（前身 FNS / Fast Note Sync）是一個輕量級、自託管、全功能的 Obsidian 雲端同步與知識管理服務端：
+**Nimbus Vault Sync** 是一個輕量級、自託管、全功能的 Obsidian 雲端同步與知識管理服務端：
 
 - 📡 **WebSocket 毫秒級即時同步** — 多裝置 / 多 Vault 協同，具備版本防衝突樂觀鎖與即時狀態廣播
 - 🖥 **現代化 Web 管理後台** — 支援多筆記庫切換、全文模糊檢索、線上 Markdown 編輯預覽、裝置管理與垃圾桶

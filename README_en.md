@@ -11,7 +11,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
 [![License](https://img.shields.io/badge/License-MIT-F59E0B?style=flat&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
-**Nimbus Vault Sync** (formerly FNS / Fast Note Sync) is a lightweight, self-hosted, full-featured Obsidian cloud synchronization and knowledge management backend service:
+**Nimbus Vault Sync** is a lightweight, self-hosted, full-featured Obsidian cloud synchronization and knowledge management backend service:
 
 - 📡 **Millisecond-Level WebSocket Real-Time Sync** — Multi-device & multi-vault collaboration with optimistic concurrency control, conflict prevention, and real-time state broadcasting.
 - 🖥 **Modern Web Admin Console** — Multi-vault switcher, full-text fuzzy search, online Markdown editor & preview, device management, and trash bin.
