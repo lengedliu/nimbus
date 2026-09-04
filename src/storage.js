@@ -530,6 +530,31 @@ function yieldToEventLoop() {
 }
 
 /**
+ * 读取文本文件内容并使用内存缓存（以 mtimeMs 与 size 为 cache key）。
+ * 避免频繁重复读取磁盘，减少全库扫描时的磁盘 I/O 压力。
+ */
+function readCachedText(vaultId, relPath, meta = null) {
+  const cache = getContentCache(vaultId);
+  const cached = cache.get(relPath);
+  const expectedMtime = meta ? meta.mtime : null;
+  const expectedSize = meta ? meta.size : null;
+
+  if (cached && (expectedMtime === null || cached.mtimeMs === expectedMtime) && (expectedSize === null || cached.size === expectedSize)) {
+    return cached.content;
+  }
+
+  const buf = readFile(vaultId, relPath);
+  if (!buf) return null;
+  const text = buf.toString('utf8');
+  cache.set(relPath, {
+    mtimeMs: expectedMtime || Date.now(),
+    size: expectedSize !== null ? expectedSize : buf.length,
+    content: text,
+  });
+  return text;
+}
+
+/**
  * 搜索文件名与文本内容。
  * 现在是 async 的：一是可以复用内容缓存少读盘，二是每处理一批文件就
  * 主动让出一次事件循环，这样一次大范围搜索不会把其他用户的请求、
@@ -541,7 +566,6 @@ async function searchVault(vaultId, query, limit = 50) {
   const manifest = getManifest(vaultId);
   const paths = Object.keys(manifest).sort();
   const results = [];
-  const cache = getContentCache(vaultId);
 
   let processed = 0;
   for (const relPath of paths) {
@@ -554,17 +578,7 @@ async function searchVault(vaultId, query, limit = 50) {
     let matchesCount = 0;
 
     if (SEARCHABLE_EXT_RE.test(relPath)) {
-      let text;
-      const cached = cache.get(relPath);
-      if (cached && cached.mtimeMs === meta.mtime && cached.size === meta.size) {
-        text = cached.content;
-      } else {
-        const buf = readFile(vaultId, relPath);
-        if (buf) {
-          text = buf.toString('utf8');
-          cache.set(relPath, { mtimeMs: meta.mtime, size: meta.size, content: text });
-        }
-      }
+      const text = readCachedText(vaultId, relPath, meta);
 
       if (text) {
         const lowerText = text.toLowerCase();
@@ -704,6 +718,9 @@ module.exports = {
   invalidateManifestCache,
   readFile,
   readFileStream,
+  readCachedText,
+  yieldToEventLoop,
+  invalidateContentCacheEntry,
   createUploadTempPath,
   writeFile,
   writeFileFromPath,

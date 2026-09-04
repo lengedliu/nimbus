@@ -1,4 +1,6 @@
 const { z } = require('zod');
+const dns = require('dns').promises;
+const net = require('net');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const storage = require('./storage');
 const vaultsStore = require('./vaults');
@@ -73,6 +75,169 @@ function analyzeMarkdown(text) {
     charCount,
     estimatedReadingTimeMinutes: Math.ceil(wordCount / 300) || 1,
   };
+}
+
+/** Helper: check if an IPv4 or IPv6 address is private, loopback, link-local, or cloud metadata */
+function isPrivateIp(ip) {
+  if (!ip) return true;
+  // Normalize IPv4-mapped IPv6
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+  if (ip === '::1' || ip === '0:0:0:0:0:0:0:1' || ip === '::') return true;
+
+  if (net.isIPv4(ip)) {
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4) return true;
+    // 0.0.0.0/8
+    if (parts[0] === 0) return true;
+    // 10.0.0.0/8
+    if (parts[0] === 10) return true;
+    // 127.0.0.0/8 (Loopback)
+    if (parts[0] === 127) return true;
+    // 169.254.0.0/16 (Link-local / Cloud metadata service e.g. 169.254.169.254)
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    // 172.16.0.0/12
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    // 192.168.0.0/16
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    // 100.64.0.0/10 (Carrier-grade NAT)
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+    // Broadcast
+    if (parts[0] === 255 && parts[1] === 255 && parts[2] === 255 && parts[3] === 255) return true;
+    return false;
+  }
+
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase();
+    // Unique local address fc00::/7 (fc00... or fd00...)
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
+    // Link-local unicast fe80::/10
+    if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true;
+    return false;
+  }
+
+  return true;
+}
+
+/** Helper: validate URL against SSRF (no localhost, internal IP, cloud metadata, non-http schemes) */
+async function validateUrlForSsrf(targetUrl) {
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    throw new Error('Invalid URL format.');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Forbidden URL protocol: ${parsed.protocol}. Only http: and https: are allowed.`);
+  }
+
+  // If deployed in a purely private LAN / NAS environment, allow LAN URLs via env flag: ALLOW_PRIVATE_ATTACHMENT_URLS=1
+  const allowPrivate = process.env.ALLOW_PRIVATE_ATTACHMENT_URLS === '1' || process.env.ALLOW_PRIVATE_ATTACHMENT_URLS === 'true';
+
+  const hostname = parsed.hostname.toLowerCase();
+  // Cloud metadata endpoint is ALWAYS blocked even in private LAN mode
+  if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') {
+    throw new Error(`Access to cloud metadata service "${hostname}" is forbidden.`);
+  }
+
+  if (!allowPrivate) {
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal')
+    ) {
+      throw new Error(`Access to local or private host "${hostname}" is blocked by default SSRF protection. To allow NAS/LAN downloads, set ALLOW_PRIVATE_ATTACHMENT_URLS=1 in your server environment.`);
+    }
+
+    // Resolve hostname and check all returned IP addresses
+    if (net.isIP(hostname)) {
+      if (isPrivateIp(hostname)) {
+        throw new Error(`Access to private IP address "${hostname}" is blocked by default SSRF protection. To allow NAS/LAN downloads, set ALLOW_PRIVATE_ATTACHMENT_URLS=1 in your server environment.`);
+      }
+    } else {
+      try {
+        const addresses = await dns.lookup(hostname, { all: true });
+        if (!addresses || addresses.length === 0) {
+          throw new Error(`Could not resolve hostname "${hostname}".`);
+        }
+        for (const addr of addresses) {
+          if (isPrivateIp(addr.address)) {
+            throw new Error(`Hostname "${hostname}" resolved to private IP "${addr.address}", which is blocked by default SSRF protection. To allow NAS/LAN downloads, set ALLOW_PRIVATE_ATTACHMENT_URLS=1 in your server environment.`);
+          }
+        }
+      } catch (err) {
+        throw new Error(`DNS resolution failed for "${hostname}": ${err.message}`);
+      }
+    }
+  }
+
+  return parsed;
+}
+
+/** Helper: safely download file buffer with SSRF protection, size limit, and timeout */
+async function safeDownloadAttachment(sourceUrl, maxSize = 30 * 1024 * 1024) {
+  let currentUrl = sourceUrl;
+  let redirects = 0;
+  const maxRedirects = 3;
+
+  while (redirects <= maxRedirects) {
+    await validateUrlForSsrf(currentUrl);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000); // 12s timeout
+
+    let resp;
+    try {
+      resp = await fetch(currentUrl, {
+        signal: controller.signal,
+        redirect: 'manual', // Manual redirect control to validate next URL against SSRF
+        headers: {
+          'User-Agent': 'Nimbus-Vault-Sync/1.2 (Attachment Downloader)',
+        },
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        throw new Error('Download timed out after 12 seconds.');
+      }
+      throw new Error(`Failed to fetch attachment from URL: ${err.message}`);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Handle redirects safely
+    if (resp.status === 301 || resp.status === 302 || resp.status === 303 || resp.status === 307 || resp.status === 308) {
+      const location = resp.headers.get('location');
+      if (!location) {
+        throw new Error(`Received HTTP ${resp.status} redirect without a Location header.`);
+      }
+      currentUrl = new URL(location, currentUrl).toString();
+      redirects++;
+      continue;
+    }
+
+    if (!resp.ok) {
+      throw new Error(`Failed to download attachment from URL: HTTP ${resp.status} ${resp.statusText}`);
+    }
+
+    // Check Content-Length header if provided
+    const cl = resp.headers.get('content-length');
+    if (cl && parseInt(cl, 10) > maxSize) {
+      throw new Error(`Attachment file size (${cl} bytes) exceeds the maximum allowed limit of ${maxSize / (1024 * 1024)}MB.`);
+    }
+
+    const arrayBuf = await resp.arrayBuffer();
+    if (arrayBuf.byteLength > maxSize) {
+      throw new Error(`Downloaded file size (${arrayBuf.byteLength} bytes) exceeds the maximum allowed limit of ${maxSize / (1024 * 1024)}MB.`);
+    }
+
+    return Buffer.from(arrayBuf);
+  }
+
+  throw new Error('Too many HTTP redirects during attachment download.');
 }
 
 /**
@@ -166,6 +331,7 @@ function buildMcpServer(user, defaultVaultId) {
       const allTags = {};
 
       const files = [];
+      let processed = 0;
 
       for (const p of paths) {
         const meta = manifest[p] || { size: 0, mtime: 0, ctime: 0 };
@@ -173,10 +339,9 @@ function buildMcpServer(user, defaultVaultId) {
         const lower = p.toLowerCase();
         if (lower.endsWith('.md')) {
           mdCount++;
-          // Sample tags from markdown notes
-          const buf = storage.readFile(id, p);
-          if (buf) {
-            const text = buf.toString('utf8');
+          // Sample tags from cached markdown notes
+          const text = storage.readCachedText(id, p, meta);
+          if (text) {
             const tags = Array.from(text.matchAll(/(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5\/-]+)/g)).map((m) => m[1]);
             for (const t of tags) {
               allTags[t] = (allTags[t] || 0) + 1;
@@ -190,6 +355,11 @@ function buildMcpServer(user, defaultVaultId) {
           mediaCount++;
         }
         files.push({ path: p, ...meta });
+
+        processed++;
+        if (processed % 40 === 0) {
+          await storage.yieldToEventLoop();
+        }
       }
 
       // Recent 10 modified notes
@@ -534,12 +704,7 @@ function buildMcpServer(user, defaultVaultId) {
         const rawBase64 = contentBase64.replace(/^data:[^;]+;base64,/, '');
         buffer = Buffer.from(rawBase64, 'base64');
       } else if (sourceUrl) {
-        const resp = await fetch(sourceUrl);
-        if (!resp.ok) {
-          throw new Error(`Failed to download attachment from URL: HTTP ${resp.status} ${resp.statusText}`);
-        }
-        const arrayBuf = await resp.arrayBuffer();
-        buffer = Buffer.from(arrayBuf);
+        buffer = await safeDownloadAttachment(sourceUrl, 50 * 1024 * 1024); // 50MB max attachment limit with strict SSRF defense
       } else {
         throw new Error('Either contentBase64 or sourceUrl must be provided to upload an attachment.');
       }
@@ -755,12 +920,13 @@ function buildMcpServer(user, defaultVaultId) {
       }
 
       const results = [];
+      let processed = 0;
 
       for (const p of notePaths) {
         if (results.length >= limit) break;
-        const buf = storage.readFile(id, p);
-        if (!buf) continue;
-        const text = buf.toString('utf8');
+        const meta = manifest[p];
+        const text = storage.readCachedText(id, p, meta);
+        if (!text) continue;
         const lines = text.split(/\r?\n/);
 
         for (let i = 0; i < lines.length; i++) {
@@ -775,6 +941,11 @@ function buildMcpServer(user, defaultVaultId) {
               snippet: line.trim(),
             });
           }
+        }
+
+        processed++;
+        if (processed % 40 === 0) {
+          await storage.yieldToEventLoop();
         }
       }
 
@@ -805,11 +976,12 @@ function buildMcpServer(user, defaultVaultId) {
       }
 
       const tagMap = {};
+      let processed = 0;
 
       for (const p of notePaths) {
-        const buf = storage.readFile(id, p);
-        if (!buf) continue;
-        const text = buf.toString('utf8');
+        const meta = manifest[p];
+        const text = storage.readCachedText(id, p, meta);
+        if (!text) continue;
         const tags = Array.from(text.matchAll(/(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5\/-]+)/g)).map((m) => m[1]);
         for (const t of tags) {
           if (!tagMap[t]) tagMap[t] = { count: 0, notes: [] };
@@ -817,6 +989,11 @@ function buildMcpServer(user, defaultVaultId) {
           if (!tagMap[t].notes.includes(p)) {
             tagMap[t].notes.push(p);
           }
+        }
+
+        processed++;
+        if (processed % 40 === 0) {
+          await storage.yieldToEventLoop();
         }
       }
 
