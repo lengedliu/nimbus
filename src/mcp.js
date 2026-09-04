@@ -84,7 +84,7 @@ function analyzeMarkdown(text) {
 function buildMcpServer(user, defaultVaultId) {
   const server = new McpServer({ name: 'nimbus-fast-note-sync', version: '1.2.0' });
 
-  function resolveVaultId(vaultId) {
+  function resolveVaultId(vaultId, requireWrite = false) {
     const input = (vaultId || defaultVaultId || '').trim();
     if (!input) {
       throw new Error(
@@ -109,6 +109,16 @@ function buildMcpServer(user, defaultVaultId) {
         `Vault "${input}" not found or unauthorized for this account. Available vaults: ${userVaults.map((v) => `"${v.name}" (${v.id})`).join(', ') || 'none'}`
       );
     }
+
+    if (requireWrite) {
+      const canWrite = vaultsStore.hasWriteAccess(user.id, found.id, user.role === 'admin');
+      if (!canWrite) {
+        throw new Error(
+          `Permission denied: You only have read-only access to vault "${found.name}". Modification operations are forbidden.`
+        );
+      }
+    }
+
     return found.id;
   }
 
@@ -348,7 +358,7 @@ function buildMcpServer(user, defaultVaultId) {
       baseHash: z.string().optional().describe('Optional hash of the file when last read, for optimistic locking & conflict prevention.'),
     },
     async ({ vaultId, path: notePath, content, baseHash }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const manifest = storage.getManifest(id) || {};
       const actualBaseHash = baseHash || manifest[notePath]?.hash;
       const buffer = Buffer.from(content, 'utf8');
@@ -378,7 +388,7 @@ function buildMcpServer(user, defaultVaultId) {
       ensureNewline: z.boolean().optional().describe('Ensure there is a newline separator before appending. Defaults to true.'),
     },
     async ({ vaultId, path: notePath, content, heading, withTimestamp = false, ensureNewline = true }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const buf = storage.readFile(id, notePath);
       let originalText = buf ? buf.toString('utf8') : '';
 
@@ -431,7 +441,7 @@ function buildMcpServer(user, defaultVaultId) {
       withTimestamp: z.boolean().optional().describe('If true, prepends a timestamp.'),
     },
     async ({ vaultId, path: notePath, content, withTimestamp = false }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const buf = storage.readFile(id, notePath);
       const originalText = buf ? buf.toString('utf8') : '';
 
@@ -474,7 +484,7 @@ function buildMcpServer(user, defaultVaultId) {
       replaceAll: z.boolean().optional().describe('If true, replace all occurrences instead of only the first. Defaults to false.'),
     },
     async ({ vaultId, path: notePath, search, replace, replaceAll = false }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const buf = storage.readFile(id, notePath);
       if (buf === null) throw new Error(`Note "${notePath}" not found.`);
 
@@ -511,7 +521,7 @@ function buildMcpServer(user, defaultVaultId) {
       overwrite: z.boolean().optional().describe('If true, overwrites any existing file at the path. Defaults to true.'),
     },
     async ({ vaultId, path: filePath, contentBase64, sourceUrl, overwrite = true }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const manifest = storage.getManifest(id) || {};
 
       if (manifest[filePath] && !overwrite) {
@@ -605,7 +615,7 @@ function buildMcpServer(user, defaultVaultId) {
       createIfMissing: z.boolean().optional().describe('If true, creates the daily note with a title header if it does not exist. Defaults to true.'),
     },
     async ({ vaultId, date, folder, createIfMissing = true }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, createIfMissing);
       const targetDate = date || getTodayString();
       const manifest = storage.getManifest(id) || {};
       const allPaths = Object.keys(manifest);
@@ -668,7 +678,7 @@ function buildMcpServer(user, defaultVaultId) {
       withTimestamp: z.boolean().optional().describe('Prepend [HH:mm:ss] timestamp. Defaults to true.'),
     },
     async ({ vaultId, content, date, folder, heading, withTimestamp = true }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const targetDate = date || getTodayString();
       const manifest = storage.getManifest(id) || {};
       const allPaths = Object.keys(manifest);
@@ -835,7 +845,7 @@ function buildMcpServer(user, defaultVaultId) {
       overwrite: z.boolean().optional().describe('If true, overwrites any file existing at newPath. Defaults to false.'),
     },
     async ({ vaultId, oldPath, newPath, overwrite = false }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const buf = storage.readFile(id, oldPath);
       if (buf === null) throw new Error(`Source note "${oldPath}" does not exist.`);
 
@@ -865,7 +875,7 @@ function buildMcpServer(user, defaultVaultId) {
       path: z.string().describe('Vault-relative path to delete.'),
     },
     async ({ vaultId, path: notePath }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const ok = storage.deleteFile(id, notePath);
       if (ok) {
         fnsHub.broadcastFileDelete(id, notePath, user.id);
@@ -930,7 +940,7 @@ function buildMcpServer(user, defaultVaultId) {
       allowCopy: z.boolean().optional().describe('Allow readers to copy full text (default: true).'),
     },
     async ({ vaultId, path: notePath, title, password, expiresDays, allowCopy = true }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
       const manifest = storage.getManifest(id) || {};
       if (!manifest[notePath]) {
         throw new Error(`Note "${notePath}" not found in vault.`);
@@ -982,7 +992,7 @@ function buildMcpServer(user, defaultVaultId) {
       commitMessage: z.string().optional().describe('Optional custom commit message.'),
     },
     async ({ vaultId, action = 'commit_and_push', commitMessage }) => {
-      const id = resolveVaultId(vaultId);
+      const id = resolveVaultId(vaultId, true);
 
       if (action === 'test_connection') {
         const testRes = await gitSync.testConnection(id);

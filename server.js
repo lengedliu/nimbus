@@ -54,9 +54,11 @@ storage.cleanupAllStaleUploadTemps();
 
 const app = express();
 app.set('fnsHub', fnsHub);
-if (TRUST_PROXY) {
-  app.set('trust proxy', 1);
-}
+// Cloud Run / Nginx / 反向代理环境下自动信任反向代理，同时支持 TRUST_PROXY 环境变量显式配置
+const trustProxySetting = process.env.TRUST_PROXY !== undefined
+  ? (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true')
+  : true;
+app.set('trust proxy', trustProxySetting ? 1 : false);
 app.use(cors());
 app.use(compression()); // 文本类响应（JSON/HTML/笔记内容）走 gzip；八进制流的文件下载会被自动跳过
 app.use(express.json({ limit: '50mb' }));
@@ -70,6 +72,7 @@ const apiLimiter = rateLimit({
   limit: 600,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: { error: '请求过于频繁，请稍后再试' },
 });
 app.use('/api', apiLimiter);

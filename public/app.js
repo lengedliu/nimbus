@@ -5195,16 +5195,16 @@
 
   function openGlobalSearchModal() {
     const modalHtml = `
-      <div class="global-search-modal" style="display:flex;flex-direction:column;max-height:85vh;">
-        <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);">
-          <span style="font-size:20px;">🔍</span>
-          <input type="text" id="gs-input" placeholder="输入关键词检索笔记标题、路径或正文内容… (支持实时多库检索)" autofocus style="flex:1;border:none;background:transparent;font-size:15px;outline:none;margin:0;color:var(--text);" />
-          <span class="modal-close" style="font-size:11px;color:var(--muted);background:var(--panel-2);padding:3px 8px;border-radius:4px;border:1px solid var(--border);cursor:pointer;">ESC 退出</span>
+      <div class="global-search-modal modal-wide" style="display:flex;flex-direction:column;max-height:85vh;width:100%;">
+        <div style="display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid var(--border);">
+          <span style="font-size:22px;">🔍</span>
+          <input type="text" id="gs-input" placeholder="输入关键词检索笔记标题、路径或正文内容… (支持实时多库检索)" autofocus style="flex:1;border:none;background:transparent;font-size:16px;outline:none;margin:0;color:var(--text);" />
+          <span class="modal-close" style="font-size:11px;color:var(--muted);background:var(--panel-2);padding:4px 10px;border-radius:4px;border:1px solid var(--border);cursor:pointer;">ESC 退出</span>
         </div>
-        <div id="gs-results" style="flex:1;overflow-y:auto;max-height:520px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;">
-          <div style="font-size:13px;color:var(--muted);text-align:center;padding:36px 0;">
-            <div style="font-size:32px;margin-bottom:8px;">🔎</div>
-            <div>输入关键词开始在所有 Vault 中检索标题及笔记内容…</div>
+        <div id="gs-results" class="global-search-results" style="flex:1;overflow-y:auto;max-height:600px;padding:14px 20px;display:flex;flex-direction:column;gap:10px;">
+          <div style="font-size:13px;color:var(--muted);text-align:center;padding:42px 0;">
+            <div style="font-size:36px;margin-bottom:10px;">🔎</div>
+            <div>输入关键词开始在所有 Vault 中检索标题及笔记正文内容…</div>
           </div>
         </div>
       </div>
