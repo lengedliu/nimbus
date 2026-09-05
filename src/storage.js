@@ -530,27 +530,21 @@ function yieldToEventLoop() {
 }
 
 /**
- * 读取文本文件内容并使用内存缓存（以 mtimeMs 与 size 为 cache key）。
- * 避免频繁重复读取磁盘，减少全库扫描时的磁盘 I/O 压力。
+ * 读取一个文件的文本内容，命中缓存（size/mtime 都没变）就不用重新读盘。
+ * 导出给 mcp.js 的 get_vault_stats / search_notes / list_tags 复用，
+ * 这几个工具需要遍历整个 vault 的文本内容，不应该各自再实现一遍读盘逻辑。
+ * meta 是调用方已经从 getManifest() 里拿到的那条 { size, mtime, ... }，避免重复查表。
  */
-function readCachedText(vaultId, relPath, meta = null) {
+function getTextContent(vaultId, relPath, meta) {
   const cache = getContentCache(vaultId);
   const cached = cache.get(relPath);
-  const expectedMtime = meta ? meta.mtime : null;
-  const expectedSize = meta ? meta.size : null;
-
-  if (cached && (expectedMtime === null || cached.mtimeMs === expectedMtime) && (expectedSize === null || cached.size === expectedSize)) {
+  if (cached && cached.mtimeMs === meta.mtime && cached.size === meta.size) {
     return cached.content;
   }
-
   const buf = readFile(vaultId, relPath);
   if (!buf) return null;
   const text = buf.toString('utf8');
-  cache.set(relPath, {
-    mtimeMs: expectedMtime || Date.now(),
-    size: expectedSize !== null ? expectedSize : buf.length,
-    content: text,
-  });
+  cache.set(relPath, { mtimeMs: meta.mtime, size: meta.size, content: text });
   return text;
 }
 
@@ -578,7 +572,7 @@ async function searchVault(vaultId, query, limit = 50) {
     let matchesCount = 0;
 
     if (SEARCHABLE_EXT_RE.test(relPath)) {
-      const text = readCachedText(vaultId, relPath, meta);
+      const text = getTextContent(vaultId, relPath, meta);
 
       if (text) {
         const lowerText = text.toLowerCase();
@@ -718,9 +712,6 @@ module.exports = {
   invalidateManifestCache,
   readFile,
   readFileStream,
-  readCachedText,
-  yieldToEventLoop,
-  invalidateContentCacheEntry,
   createUploadTempPath,
   writeFile,
   writeFileFromPath,
@@ -739,4 +730,8 @@ module.exports = {
   getVaultStats,
   exportVaultZip,
   cleanupAllStaleUploadTemps,
+  getTextContent,
+  yieldToEventLoop,
+  SEARCHABLE_EXT_RE,
+  SEARCH_YIELD_BATCH_SIZE,
 };

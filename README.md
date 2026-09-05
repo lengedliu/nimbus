@@ -1,17 +1,6 @@
 # Nimbus Vault Sync — self-hosted Obsidian 同步 + 管理 + MCP + 开放 API 服务
 
-[简体中文](README.md) / [English](README_en.md) / [日本語](README_ja.md) / [한국어](README_ko.md) / [繁體中文](README_zh-TW.md)
-
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Express](https://img.shields.io/badge/Express-4.19-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com)
-[![WebSocket](https://img.shields.io/badge/WebSocket-Realtime-010101?style=flat&logo=socketdotio&logoColor=white)](https://github.com/websockets/ws)
-[![MCP](https://img.shields.io/badge/MCP-18_Tools-8A2BE2?style=flat&logo=anthropic&logoColor=white)](https://modelcontextprotocol.io)
-[![Obsidian](https://img.shields.io/badge/Obsidian-Plugin-7C3AED?style=flat&logo=obsidian&logoColor=white)](https://obsidian.md)
-[![Database](https://img.shields.io/badge/Database-SQLite%20%7C%20MySQL%20%7C%20Postgres-4479A1?style=flat&logo=sqlite&logoColor=white)](#)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
-[![License](https://img.shields.io/badge/License-MIT-F59E0B?style=flat&logo=opensourceinitiative&logoColor=white)](LICENSE)
-
-**Nimbus Vault Sync** 是一个轻量级、自托管、全功能的 Obsidian 云端同步与知识管理服务端：
+**Nimbus Vault Sync**（前身 FNS / Fast Note Sync）是一个轻量级、自托管、全功能的 Obsidian 云端同步与知识管理服务端：
 
 - 📡 **WebSocket 毫秒级实时同步** — 多设备/多 vault 协同，带版本防冲突乐观锁与实时状态广播
 - 🖥 **现代化 Web 管理后台** — 支持多笔记库切换、全文检索、在线 Markdown 编辑预览、多端协同与回收站
@@ -220,17 +209,3 @@ Nimbus 原生内置了 **StreamableHTTP** 协议的 MCP 接口，AI 客户端（
 1. **强密钥**：请务必将 `.env` 中的 `JWT_SECRET` 设置为随机强字符串。
 2. **反向代理与 HTTPS**：生产环境中推荐在 Nginx、Caddy 或 Cloudflare 后面运行，启用 HTTPS/WSS。
 3. **数据备份**：所有笔记和系统数据存储在 `./data` 目录下，定期备份此目录或通过 Web 后台「一键备份」即可完整保留数据。
-
----
-
-## 💖 Sponsorship & Support / 赞助与支持
-
-- If you find this project useful and would like it to continue development, please support us in the following ways. Thank you for supporting open-source software!
-- 如果您觉得本项目对您有所帮助并希望它持续迭代与更新，欢迎通过以下方式赞助支持作者，感谢您对开源软件的认可与鼓励：
-
-| Ko-fi *Non-China Region* | | WeChat Pay *China Region* |
-| :---: | :---: | :---: |
-| <a href="https://ko-fi.com/lengedliu" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" width="220" alt="Support me on Ko-fi" /></a> | or | <img src="./public/wechat-reward.jpg" width="190" alt="WeChat Pay 微信打赏" /> |
-
----
-

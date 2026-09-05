@@ -4,6 +4,7 @@ const { requireAuth } = require('../auth');
 const vaultsStore = require('../vaults');
 const storage = require('../storage');
 const shares = require('../shares');
+const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.get('/vaults/:vaultId/shares', requireAuth, (req, res) => {
   res.json({ shares: list });
 });
 
-router.post('/vaults/:vaultId/shares', requireAuth, async (req, res) => {
+router.post('/vaults/:vaultId/shares', requireAuth, asyncHandler(async (req, res) => {
   const { vaultId } = req.params;
   if (!vaultsStore.userOwnsVault(req.user.id, vaultId)) {
     return res.status(404).json({ error: 'Not found' });
@@ -51,7 +52,7 @@ router.post('/vaults/:vaultId/shares', requireAuth, async (req, res) => {
   });
 
   res.json({ share: record });
-});
+}));
 
 router.delete('/vaults/:vaultId/shares/:shareId', requireAuth, (req, res) => {
   const { vaultId, shareId } = req.params;
@@ -64,7 +65,7 @@ router.delete('/vaults/:vaultId/shares/:shareId', requireAuth, (req, res) => {
 
 // --------------------------- Public Share API ---------------------------
 
-router.get('/public/shares/:shareId', async (req, res) => {
+router.get('/public/shares/:shareId', asyncHandler(async (req, res) => {
   const { shareId } = req.params;
   const share = shares.getById(shareId);
   if (!share) return res.status(404).json({ error: 'Share link not found or expired' });
@@ -95,6 +96,6 @@ router.get('/public/shares/:shareId', async (req, res) => {
     expiresAt: share.expiresAt,
     content: buf.toString('utf8'),
   });
-});
+}));
 
 module.exports = router;

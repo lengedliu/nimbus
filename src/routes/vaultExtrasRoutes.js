@@ -5,6 +5,7 @@ const storage = require('../storage');
 const syncRules = require('../syncRules');
 const syncLogger = require('../syncLogger');
 const gitSync = require('../gitSync');
+const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -123,13 +124,13 @@ router.get('/:vaultId/stats', (req, res) => {
 
 // ---------------------------------- search ---------------------------------------
 
-router.get('/:vaultId/search', async (req, res) => {
+router.get('/:vaultId/search', asyncHandler(async (req, res) => {
   if (!checkAccess(req, res, false)) return;
   const { vaultId } = req.params;
   const { q } = req.query;
   const results = await storage.searchVault(vaultId, q);
   res.json({ results });
-});
+}));
 
 // ---------------------------------- sync rules -----------------------------------
 

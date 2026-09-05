@@ -6,6 +6,7 @@ const vaultsStore = require('../vaults');
 const sharesStore = require('../shares');
 const syncRulesStore = require('../syncRules');
 const dbManager = require('../db');
+const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -35,13 +36,13 @@ router.put('/', (req, res) => {
 });
 
 // POST /api/settings/change-password - modify own password
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', asyncHandler(async (req, res) => {
   const { oldPassword, newPassword } = req.body || {};
   if (!oldPassword || !newPassword) {
     return res.status(400).json({ error: '请输入原密码与新密码' });
   }
-  if (newPassword.length < 4) {
-    return res.status(400).json({ error: '新密码长度至少需要4位' });
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: '新密码长度至少需要6位' });
   }
 
   const verified = await users.verifyPassword(req.user.username, oldPassword);
@@ -55,12 +56,15 @@ router.post('/change-password', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 // --------------------------- Database Multi-Engine Management ---------------------------
 
 // GET /api/settings/database - retrieve active database engine status and records count
 router.get('/database', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: '只有管理员有权限查看数据库配置与全局统计信息' });
+  }
   const status = dbManager.getStatus();
   const allUsers = users.getRawUsers() || [];
   const allVaults = vaultsStore.getRawVaults() || [];
@@ -108,7 +112,12 @@ router.get('/database', (req, res) => {
 });
 
 // POST /api/settings/database/test - test connection to target database
+// 会真的拿请求体里的 host/port/user/password 去发起数据库连接——
+// 不限权的话，任何登录用户都能把这当成内网端口探测工具，必须管理员专用。
 router.post('/database/test', async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: '只有管理员有权限测试数据库连接' });
+  }
   const config = req.body || {};
   try {
     const result = await dbManager.testConnection(config);
@@ -329,7 +338,16 @@ router.delete('/tokens/:tokenId', (req, res) => {
 // ----------------------- Webhook Settings -----------------------
 const webhooks = require('../webhooks');
 
+function requireAdminInline(req, res) {
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ error: '只有管理员有权限查看或配置全局 Webhook' });
+    return false;
+  }
+  return true;
+}
+
 router.get('/webhooks', (req, res) => {
+  if (!requireAdminInline(req, res)) return;
   const config = webhooks.getWebhookConfig();
   res.json({ ok: true, config, webhooks: config });
 });
@@ -345,7 +363,11 @@ const handleSaveWebhooks = (req, res) => {
 router.put('/webhooks', handleSaveWebhooks);
 router.post('/webhooks', handleSaveWebhooks);
 
+// 注意：testWebhook() 会把请求体里的 url/platform/secret 原样拿去发起真实 HTTP 请求，
+// 并把目标服务器的响应内容透传回调用者——如果不限管理员，等于给了任何登录用户一个
+// "让服务器帮你请求任意内网地址、还能看到响应内容"的 SSRF 探测工具，必须严格限权。
 router.post('/webhooks/test', async (req, res) => {
+  if (!requireAdminInline(req, res)) return;
   try {
     const result = await webhooks.testWebhook(req.body);
     res.json(result);

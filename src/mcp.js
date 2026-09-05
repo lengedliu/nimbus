@@ -1,6 +1,5 @@
 const { z } = require('zod');
-const dns = require('dns').promises;
-const net = require('net');
+const dns = require('node:dns').promises;
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const storage = require('./storage');
 const vaultsStore = require('./vaults');
@@ -8,6 +7,83 @@ const sharesStore = require('./shares');
 const fnsHub = require('./wsHub');
 const gitSync = require('./gitSync');
 const webhooks = require('./webhooks');
+const { isPrivateOrReservedIp } = require('./utils/ssrfGuard');
+
+// upload_attachment 的 sourceUrl 允许下载的最大字节数，防止一个巨大的远程文件把内存吃爆。
+const MAX_ATTACHMENT_BYTES = parseInt(process.env.ATTACHMENT_MAX_MB || '200', 10) * 1024 * 1024;
+
+/**
+ * 安全地下载一个远程附件：只允许 http/https，解析出真实 IP 后拒绝内网/本机地址
+ * （防止把 Nimbus 服务器当跳板去探测内网或云主机元数据接口），并限制下载大小上限。
+ * 用解析后的 IP 而不是原始 hostname 做判断，避免 DNS rebinding 绕过检查。
+ */
+async function fetchAttachmentUrlSafely(sourceUrl) {
+  let parsed;
+  try {
+    parsed = new URL(sourceUrl);
+  } catch {
+    throw new Error(`Invalid sourceUrl: "${sourceUrl}"`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('sourceUrl must be an http:// or https:// URL.');
+  }
+
+  let addresses;
+  try {
+    addresses = await dns.lookup(parsed.hostname, { all: true });
+  } catch (e) {
+    throw new Error(`Could not resolve host "${parsed.hostname}": ${e.message}`);
+  }
+  for (const { address } of addresses) {
+    if (isPrivateOrReservedIp(address)) {
+      throw new Error(
+        `Refusing to fetch "${sourceUrl}": resolves to a private/internal address (${address}). ` +
+        'Downloading attachments from internal network addresses is not allowed.'
+      );
+    }
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  let resp;
+  try {
+    resp = await fetch(sourceUrl, { signal: controller.signal, redirect: 'follow' });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  if (!resp.ok) {
+    throw new Error(`Failed to download attachment from URL: HTTP ${resp.status} ${resp.statusText}`);
+  }
+
+  const declaredLength = resp.headers.get('content-length');
+  if (declaredLength && parseInt(declaredLength, 10) > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`Remote file is too large (> ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB).`);
+  }
+
+  // 就算没有 Content-Length（或撒谎），也要在实际读取时兜底限制大小。
+  if (!resp.body) {
+    const arrayBuf = await resp.arrayBuffer();
+    if (arrayBuf.byteLength > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`Remote file is too large (> ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB).`);
+    }
+    return Buffer.from(arrayBuf);
+  }
+
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_ATTACHMENT_BYTES) {
+      reader.cancel().catch(() => {});
+      throw new Error(`Remote file is too large (> ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB).`);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+}
 
 /*
  * MCP tool set for Nimbus Vault Sync, modeled after and extending the reference
@@ -77,169 +153,6 @@ function analyzeMarkdown(text) {
   };
 }
 
-/** Helper: check if an IPv4 or IPv6 address is private, loopback, link-local, or cloud metadata */
-function isPrivateIp(ip) {
-  if (!ip) return true;
-  // Normalize IPv4-mapped IPv6
-  if (ip.startsWith('::ffff:')) {
-    ip = ip.substring(7);
-  }
-  if (ip === '::1' || ip === '0:0:0:0:0:0:0:1' || ip === '::') return true;
-
-  if (net.isIPv4(ip)) {
-    const parts = ip.split('.').map(Number);
-    if (parts.length !== 4) return true;
-    // 0.0.0.0/8
-    if (parts[0] === 0) return true;
-    // 10.0.0.0/8
-    if (parts[0] === 10) return true;
-    // 127.0.0.0/8 (Loopback)
-    if (parts[0] === 127) return true;
-    // 169.254.0.0/16 (Link-local / Cloud metadata service e.g. 169.254.169.254)
-    if (parts[0] === 169 && parts[1] === 254) return true;
-    // 172.16.0.0/12
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-    // 192.168.0.0/16
-    if (parts[0] === 192 && parts[1] === 168) return true;
-    // 100.64.0.0/10 (Carrier-grade NAT)
-    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
-    // Broadcast
-    if (parts[0] === 255 && parts[1] === 255 && parts[2] === 255 && parts[3] === 255) return true;
-    return false;
-  }
-
-  if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase();
-    // Unique local address fc00::/7 (fc00... or fd00...)
-    if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
-    // Link-local unicast fe80::/10
-    if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true;
-    return false;
-  }
-
-  return true;
-}
-
-/** Helper: validate URL against SSRF (no localhost, internal IP, cloud metadata, non-http schemes) */
-async function validateUrlForSsrf(targetUrl) {
-  let parsed;
-  try {
-    parsed = new URL(targetUrl);
-  } catch {
-    throw new Error('Invalid URL format.');
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`Forbidden URL protocol: ${parsed.protocol}. Only http: and https: are allowed.`);
-  }
-
-  // If deployed in a purely private LAN / NAS environment, allow LAN URLs via env flag: ALLOW_PRIVATE_ATTACHMENT_URLS=1
-  const allowPrivate = process.env.ALLOW_PRIVATE_ATTACHMENT_URLS === '1' || process.env.ALLOW_PRIVATE_ATTACHMENT_URLS === 'true';
-
-  const hostname = parsed.hostname.toLowerCase();
-  // Cloud metadata endpoint is ALWAYS blocked even in private LAN mode
-  if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') {
-    throw new Error(`Access to cloud metadata service "${hostname}" is forbidden.`);
-  }
-
-  if (!allowPrivate) {
-    if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.local') ||
-      hostname.endsWith('.internal')
-    ) {
-      throw new Error(`Access to local or private host "${hostname}" is blocked by default SSRF protection. To allow NAS/LAN downloads, set ALLOW_PRIVATE_ATTACHMENT_URLS=1 in your server environment.`);
-    }
-
-    // Resolve hostname and check all returned IP addresses
-    if (net.isIP(hostname)) {
-      if (isPrivateIp(hostname)) {
-        throw new Error(`Access to private IP address "${hostname}" is blocked by default SSRF protection. To allow NAS/LAN downloads, set ALLOW_PRIVATE_ATTACHMENT_URLS=1 in your server environment.`);
-      }
-    } else {
-      try {
-        const addresses = await dns.lookup(hostname, { all: true });
-        if (!addresses || addresses.length === 0) {
-          throw new Error(`Could not resolve hostname "${hostname}".`);
-        }
-        for (const addr of addresses) {
-          if (isPrivateIp(addr.address)) {
-            throw new Error(`Hostname "${hostname}" resolved to private IP "${addr.address}", which is blocked by default SSRF protection. To allow NAS/LAN downloads, set ALLOW_PRIVATE_ATTACHMENT_URLS=1 in your server environment.`);
-          }
-        }
-      } catch (err) {
-        throw new Error(`DNS resolution failed for "${hostname}": ${err.message}`);
-      }
-    }
-  }
-
-  return parsed;
-}
-
-/** Helper: safely download file buffer with SSRF protection, size limit, and timeout */
-async function safeDownloadAttachment(sourceUrl, maxSize = 30 * 1024 * 1024) {
-  let currentUrl = sourceUrl;
-  let redirects = 0;
-  const maxRedirects = 3;
-
-  while (redirects <= maxRedirects) {
-    await validateUrlForSsrf(currentUrl);
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000); // 12s timeout
-
-    let resp;
-    try {
-      resp = await fetch(currentUrl, {
-        signal: controller.signal,
-        redirect: 'manual', // Manual redirect control to validate next URL against SSRF
-        headers: {
-          'User-Agent': 'Nimbus-Vault-Sync/1.2 (Attachment Downloader)',
-        },
-      });
-    } catch (err) {
-      clearTimeout(timer);
-      if (err.name === 'AbortError') {
-        throw new Error('Download timed out after 12 seconds.');
-      }
-      throw new Error(`Failed to fetch attachment from URL: ${err.message}`);
-    } finally {
-      clearTimeout(timer);
-    }
-
-    // Handle redirects safely
-    if (resp.status === 301 || resp.status === 302 || resp.status === 303 || resp.status === 307 || resp.status === 308) {
-      const location = resp.headers.get('location');
-      if (!location) {
-        throw new Error(`Received HTTP ${resp.status} redirect without a Location header.`);
-      }
-      currentUrl = new URL(location, currentUrl).toString();
-      redirects++;
-      continue;
-    }
-
-    if (!resp.ok) {
-      throw new Error(`Failed to download attachment from URL: HTTP ${resp.status} ${resp.statusText}`);
-    }
-
-    // Check Content-Length header if provided
-    const cl = resp.headers.get('content-length');
-    if (cl && parseInt(cl, 10) > maxSize) {
-      throw new Error(`Attachment file size (${cl} bytes) exceeds the maximum allowed limit of ${maxSize / (1024 * 1024)}MB.`);
-    }
-
-    const arrayBuf = await resp.arrayBuffer();
-    if (arrayBuf.byteLength > maxSize) {
-      throw new Error(`Downloaded file size (${arrayBuf.byteLength} bytes) exceeds the maximum allowed limit of ${maxSize / (1024 * 1024)}MB.`);
-    }
-
-    return Buffer.from(arrayBuf);
-  }
-
-  throw new Error('Too many HTTP redirects during attachment download.');
-}
-
 /**
  * Build a fresh MCP server bound to one authenticated user (and optionally a
  * default vault resolved from the X-Default-Vault-Name header). A new
@@ -249,7 +162,7 @@ async function safeDownloadAttachment(sourceUrl, maxSize = 30 * 1024 * 1024) {
 function buildMcpServer(user, defaultVaultId) {
   const server = new McpServer({ name: 'nimbus-fast-note-sync', version: '1.2.0' });
 
-  function resolveVaultId(vaultId, requireWrite = false) {
+  function resolveVaultId(vaultId) {
     const input = (vaultId || defaultVaultId || '').trim();
     if (!input) {
       throw new Error(
@@ -274,17 +187,35 @@ function buildMcpServer(user, defaultVaultId) {
         `Vault "${input}" not found or unauthorized for this account. Available vaults: ${userVaults.map((v) => `"${v.name}" (${v.id})`).join(', ') || 'none'}`
       );
     }
-
-    if (requireWrite) {
-      const canWrite = vaultsStore.hasWriteAccess(user.id, found.id, user.role === 'admin');
-      if (!canWrite) {
-        throw new Error(
-          `Permission denied: You only have read-only access to vault "${found.name}". Modification operations are forbidden.`
-        );
-      }
-    }
-
     return found.id;
+  }
+
+  /**
+   * 和 resolveVaultId 一样，但额外要求当前用户对这个 vault 至少有"读写"权限——
+   * 用于所有会修改/删除内容的工具。resolveVaultId 本身只保证"这个用户看得到这个库"，
+   * 只读协作者也会通过那个检查；写类工具必须用这个版本，否则只读协作者就能绕过
+   * Web/REST 接口本来该有的权限限制，直接改别人的笔记。
+   */
+  function resolveWritableVaultId(vaultId) {
+    const id = resolveVaultId(vaultId);
+    const isAdmin = user.role === 'admin';
+    if (!vaultsStore.hasWriteAccess(user.id, id, isAdmin)) {
+      throw new Error('You only have read-only access to this vault and cannot make changes to it.');
+    }
+    return id;
+  }
+
+  /**
+   * 更严格的版本：要求用户是该 vault 的所有者（不含 admin 豁免），
+   * 和 REST 接口 POST /vaults/:vaultId/shares 的权限要求保持一致——
+   * 创建对外公开的分享链接应该只有库主本人能做，写权限协作者也不行。
+   */
+  function resolveOwnedVaultId(vaultId) {
+    const id = resolveVaultId(vaultId);
+    if (!vaultsStore.userOwnsVault(user.id, id)) {
+      throw new Error('Only the vault owner can create a public share link for notes in this vault.');
+    }
+    return id;
   }
 
   // ------------------------- 1. Vault Management & Stats -------------------------
@@ -331,16 +262,16 @@ function buildMcpServer(user, defaultVaultId) {
       const allTags = {};
 
       const files = [];
-      let processed = 0;
 
+      let processed = 0;
       for (const p of paths) {
         const meta = manifest[p] || { size: 0, mtime: 0, ctime: 0 };
         totalSize += meta.size || 0;
         const lower = p.toLowerCase();
         if (lower.endsWith('.md')) {
           mdCount++;
-          // Sample tags from cached markdown notes
-          const text = storage.readCachedText(id, p, meta);
+          // Sample tags from markdown notes — 用共享的内容缓存，重复调用这个工具不用每次重新读盘
+          const text = storage.getTextContent(id, p, meta);
           if (text) {
             const tags = Array.from(text.matchAll(/(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5\/-]+)/g)).map((m) => m[1]);
             for (const t of tags) {
@@ -356,8 +287,10 @@ function buildMcpServer(user, defaultVaultId) {
         }
         files.push({ path: p, ...meta });
 
+        // 大 vault 逐个读文件统计标签是同步 I/O，每处理一批就让出一次事件循环，
+        // 避免这个工具被调用时把整个进程（其他用户的请求、WebSocket 同步）卡住。
         processed++;
-        if (processed % 40 === 0) {
+        if (processed % storage.SEARCH_YIELD_BATCH_SIZE === 0) {
           await storage.yieldToEventLoop();
         }
       }
@@ -528,7 +461,7 @@ function buildMcpServer(user, defaultVaultId) {
       baseHash: z.string().optional().describe('Optional hash of the file when last read, for optimistic locking & conflict prevention.'),
     },
     async ({ vaultId, path: notePath, content, baseHash }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const manifest = storage.getManifest(id) || {};
       const actualBaseHash = baseHash || manifest[notePath]?.hash;
       const buffer = Buffer.from(content, 'utf8');
@@ -558,7 +491,7 @@ function buildMcpServer(user, defaultVaultId) {
       ensureNewline: z.boolean().optional().describe('Ensure there is a newline separator before appending. Defaults to true.'),
     },
     async ({ vaultId, path: notePath, content, heading, withTimestamp = false, ensureNewline = true }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const buf = storage.readFile(id, notePath);
       let originalText = buf ? buf.toString('utf8') : '';
 
@@ -611,7 +544,7 @@ function buildMcpServer(user, defaultVaultId) {
       withTimestamp: z.boolean().optional().describe('If true, prepends a timestamp.'),
     },
     async ({ vaultId, path: notePath, content, withTimestamp = false }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const buf = storage.readFile(id, notePath);
       const originalText = buf ? buf.toString('utf8') : '';
 
@@ -654,7 +587,7 @@ function buildMcpServer(user, defaultVaultId) {
       replaceAll: z.boolean().optional().describe('If true, replace all occurrences instead of only the first. Defaults to false.'),
     },
     async ({ vaultId, path: notePath, search, replace, replaceAll = false }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const buf = storage.readFile(id, notePath);
       if (buf === null) throw new Error(`Note "${notePath}" not found.`);
 
@@ -691,7 +624,7 @@ function buildMcpServer(user, defaultVaultId) {
       overwrite: z.boolean().optional().describe('If true, overwrites any existing file at the path. Defaults to true.'),
     },
     async ({ vaultId, path: filePath, contentBase64, sourceUrl, overwrite = true }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const manifest = storage.getManifest(id) || {};
 
       if (manifest[filePath] && !overwrite) {
@@ -703,8 +636,11 @@ function buildMcpServer(user, defaultVaultId) {
         // Strip data URI header if present (e.g. data:image/png;base64,...)
         const rawBase64 = contentBase64.replace(/^data:[^;]+;base64,/, '');
         buffer = Buffer.from(rawBase64, 'base64');
+        if (buffer.length > MAX_ATTACHMENT_BYTES) {
+          throw new Error(`Attachment is too large (> ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB).`);
+        }
       } else if (sourceUrl) {
-        buffer = await safeDownloadAttachment(sourceUrl, 50 * 1024 * 1024); // 50MB max attachment limit with strict SSRF defense
+        buffer = await fetchAttachmentUrlSafely(sourceUrl);
       } else {
         throw new Error('Either contentBase64 or sourceUrl must be provided to upload an attachment.');
       }
@@ -780,7 +716,7 @@ function buildMcpServer(user, defaultVaultId) {
       createIfMissing: z.boolean().optional().describe('If true, creates the daily note with a title header if it does not exist. Defaults to true.'),
     },
     async ({ vaultId, date, folder, createIfMissing = true }) => {
-      const id = resolveVaultId(vaultId, createIfMissing);
+      const id = resolveVaultId(vaultId);
       const targetDate = date || getTodayString();
       const manifest = storage.getManifest(id) || {};
       const allPaths = Object.keys(manifest);
@@ -801,6 +737,9 @@ function buildMcpServer(user, defaultVaultId) {
       let buf = storage.readFile(id, notePath);
 
       if (!buf && createIfMissing) {
+        // 走到这一步才是真的要创建文件——这里才要求写权限，只读协作者查看一篇
+        // 已经存在的日记不受影响，只有"需要新建"这个动作才会被拦下来。
+        resolveWritableVaultId(vaultId);
         const initialContent = `# ${targetDate}\n\n## 📝 记录\n\n`;
         const buffer = Buffer.from(initialContent, 'utf8');
         const result = storage.writeFile(id, notePath, buffer, { mtime: Date.now() });
@@ -843,7 +782,7 @@ function buildMcpServer(user, defaultVaultId) {
       withTimestamp: z.boolean().optional().describe('Prepend [HH:mm:ss] timestamp. Defaults to true.'),
     },
     async ({ vaultId, content, date, folder, heading, withTimestamp = true }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const targetDate = date || getTodayString();
       const manifest = storage.getManifest(id) || {};
       const allPaths = Object.keys(manifest);
@@ -920,12 +859,12 @@ function buildMcpServer(user, defaultVaultId) {
       }
 
       const results = [];
-      let processed = 0;
 
+      let processed = 0;
       for (const p of notePaths) {
         if (results.length >= limit) break;
         const meta = manifest[p];
-        const text = storage.readCachedText(id, p, meta);
+        const text = storage.getTextContent(id, p, meta);
         if (!text) continue;
         const lines = text.split(/\r?\n/);
 
@@ -943,8 +882,9 @@ function buildMcpServer(user, defaultVaultId) {
           }
         }
 
+        // 大 vault 逐个读文件正则匹配也是同步 I/O + CPU 密集操作，同样需要定期让出事件循环。
         processed++;
-        if (processed % 40 === 0) {
+        if (processed % storage.SEARCH_YIELD_BATCH_SIZE === 0) {
           await storage.yieldToEventLoop();
         }
       }
@@ -976,11 +916,11 @@ function buildMcpServer(user, defaultVaultId) {
       }
 
       const tagMap = {};
-      let processed = 0;
 
+      let processed = 0;
       for (const p of notePaths) {
         const meta = manifest[p];
-        const text = storage.readCachedText(id, p, meta);
+        const text = storage.getTextContent(id, p, meta);
         if (!text) continue;
         const tags = Array.from(text.matchAll(/(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5\/-]+)/g)).map((m) => m[1]);
         for (const t of tags) {
@@ -992,7 +932,7 @@ function buildMcpServer(user, defaultVaultId) {
         }
 
         processed++;
-        if (processed % 40 === 0) {
+        if (processed % storage.SEARCH_YIELD_BATCH_SIZE === 0) {
           await storage.yieldToEventLoop();
         }
       }
@@ -1022,7 +962,7 @@ function buildMcpServer(user, defaultVaultId) {
       overwrite: z.boolean().optional().describe('If true, overwrites any file existing at newPath. Defaults to false.'),
     },
     async ({ vaultId, oldPath, newPath, overwrite = false }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const buf = storage.readFile(id, oldPath);
       if (buf === null) throw new Error(`Source note "${oldPath}" does not exist.`);
 
@@ -1052,7 +992,7 @@ function buildMcpServer(user, defaultVaultId) {
       path: z.string().describe('Vault-relative path to delete.'),
     },
     async ({ vaultId, path: notePath }) => {
-      const id = resolveVaultId(vaultId, true);
+      const id = resolveWritableVaultId(vaultId);
       const ok = storage.deleteFile(id, notePath);
       if (ok) {
         fnsHub.broadcastFileDelete(id, notePath, user.id);
@@ -1117,13 +1057,15 @@ function buildMcpServer(user, defaultVaultId) {
       allowCopy: z.boolean().optional().describe('Allow readers to copy full text (default: true).'),
     },
     async ({ vaultId, path: notePath, title, password, expiresDays, allowCopy = true }) => {
-      const id = resolveVaultId(vaultId, true);
+      // 建分享链接要求"库主本人"，比其他写类工具的"有写权限即可"更严格——
+      // 和 REST 接口 POST /vaults/:vaultId/shares 保持一致，写权限协作者也不能替别人发布公开链接。
+      const id = resolveOwnedVaultId(vaultId);
       const manifest = storage.getManifest(id) || {};
       if (!manifest[notePath]) {
         throw new Error(`Note "${notePath}" not found in vault.`);
       }
 
-      const record = sharesStore.create({
+      const record = await sharesStore.create({
         vaultId: id,
         userId: user.id,
         filePath: notePath,
@@ -1169,12 +1111,16 @@ function buildMcpServer(user, defaultVaultId) {
       commitMessage: z.string().optional().describe('Optional custom commit message.'),
     },
     async ({ vaultId, action = 'commit_and_push', commitMessage }) => {
-      const id = resolveVaultId(vaultId, true);
-
       if (action === 'test_connection') {
+        // 只是测试远程连通性，不改动任何内容，只读协作者也可以用。
+        const id = resolveVaultId(vaultId);
         const testRes = await gitSync.testConnection(id);
         return jsonResult(testRes);
       }
+
+      // pull 会把远程内容合并进本地文件，commit_and_push 会推送并可能改变仓库远程状态——
+      // 这两个动作本质上都是"写"，只读协作者不应该能触发。
+      const id = resolveWritableVaultId(vaultId);
 
       if (action === 'pull') {
         const pullRes = await gitSync.pull(id);

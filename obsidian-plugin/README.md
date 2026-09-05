@@ -1,10 +1,5 @@
 # Nimbus Sync — Obsidian 实时同步插件
 
-[![Obsidian](https://img.shields.io/badge/Obsidian-Plugin-7C3AED?style=flat&logo=obsidian&logoColor=white)](https://obsidian.md)
-[![WebSocket](https://img.shields.io/badge/WebSocket-Realtime-010101?style=flat&logo=socketdotio&logoColor=white)](https://github.com/websockets/ws)
-[![Version](https://img.shields.io/badge/Version-v1.1.0-blue?style=flat)](#)
-[![License](https://img.shields.io/badge/License-MIT-F59E0B?style=flat&logo=opensourceinitiative&logoColor=white)](../LICENSE)
-
 专为自托管 **Nimbus Server** 定制的 Obsidian 双向实时同步插件。
 
 ## 功能特性
@@ -24,15 +19,3 @@
    - `styles.css`
 4. 打开 Obsidian -> 设置 -> 第三方插件 -> 刷新已安装列表 -> 开启 **Nimbus Sync**。
 5. 在插件设置中填入服务器地址（如 `http://192.168.50.154:8787`）、用户名及密码，点击“登录验证”并选择 Vault 即可开始同步。
-
----
-
-## 💖 Sponsorship & Support / 赞助与支持
-
-- If you find this plugin useful and would like it to continue development, please support us in the following ways. Thank you for supporting open-source software!
-- 如果您觉得本插件对您有所帮助并希望它持续迭代与更新，欢迎通过以下方式赞助支持作者：
-
-| Ko-fi *Non-China Region* | | WeChat Pay *China Region* |
-| :---: | :---: | :---: |
-| <a href="https://ko-fi.com/lengedliu" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" width="200" alt="Support me on Ko-fi" /></a> | or | <img src="../public/wechat-reward.jpg" width="180" alt="WeChat Pay 微信打赏" /> |
-

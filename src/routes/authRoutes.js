@@ -1,8 +1,12 @@
 const express = require('express');
 const users = require('../users');
 const { signToken } = require('../auth');
+const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
+
+// 和 settingsRoutes.js 的改密码接口保持一致的最低密码强度要求。
+const MIN_PASSWORD_LENGTH = 6;
 
 // Lightweight in-memory rate limiter for login brute-force protection
 const loginAttempts = new Map(); // ip -> { count, firstAttempt }
@@ -33,9 +37,12 @@ router.get('/status', (req, res) => {
 
 // Registration is open only for the very first user (bootstrap admin).
 // After that, use `npm run create-user` on the server to add accounts.
-router.post('/register', rateLimitLogin, async (req, res) => {
+router.post('/register', rateLimitLogin, asyncHandler(async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: `密码长度至少需要 ${MIN_PASSWORD_LENGTH} 位` });
+  }
   if (users.hasAnyUser()) {
     return res.status(403).json({ error: 'Registration closed. Ask the server admin to create your account.' });
   }
@@ -46,15 +53,15 @@ router.post('/register', rateLimitLogin, async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
-});
+}));
 
-router.post('/login', rateLimitLogin, async (req, res) => {
+router.post('/login', rateLimitLogin, asyncHandler(async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   const user = await users.verifyPassword(username, password);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
   const token = signToken(user);
   res.json({ token, user });
-});
+}));
 
 module.exports = router;

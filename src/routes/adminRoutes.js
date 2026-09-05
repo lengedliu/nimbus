@@ -42,6 +42,7 @@ router.get('/users', (req, res) => {
 router.post('/users', async (req, res) => {
   const { username, password, role, vaultAssignments } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  if (password.length < 6) return res.status(400).json({ error: '密码长度至少需要 6 位' });
   try {
     const user = await users.createUser(username, password, role === 'admin' ? 'admin' : 'user');
 

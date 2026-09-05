@@ -4,6 +4,7 @@ const vaults = require('../vaults');
 const vaultMembers = require('../vaultMembers');
 const users = require('../users');
 const storage = require('../storage');
+const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -41,7 +42,7 @@ router.get('/:vaultId/manifest', (req, res) => {
 });
 
 // GET /api/vaults/search?q=keyword - Global search across all accessible vaults (filename and note contents)
-router.get('/search', async (req, res) => {
+router.get('/search', asyncHandler(async (req, res) => {
   const { q } = req.query;
   if (!q || !q.trim()) return res.json({ results: [] });
   const isAdmin = req.user.role === 'admin';
@@ -68,10 +69,10 @@ router.get('/search', async (req, res) => {
   }
 
   res.json({ results });
-});
+}));
 
 // GET /api/vaults/:vaultId/search?q=keyword - Vault-level search
-router.get('/:vaultId/search', async (req, res) => {
+router.get('/:vaultId/search', asyncHandler(async (req, res) => {
   const { vaultId } = req.params;
   const { q } = req.query;
   const isAdmin = req.user.role === 'admin';
@@ -80,7 +81,7 @@ router.get('/:vaultId/search', async (req, res) => {
   }
   const results = await storage.searchVault(vaultId, q || '', 50);
   res.json({ results });
-});
+}));
 
 // ------------------------- Member & Permission Management -------------------------
 
