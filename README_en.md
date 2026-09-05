@@ -1,30 +1,59 @@
-# Nimbus Vault Sync — Self-Hosted Obsidian Sync + Web Admin + MCP Server + Open REST API
+# Nimbus Vault Sync — Self-Hosted Obsidian Cloud Sync & Knowledge Management Platform
 
-[简体中文](README.md) / [English](README_en.md) / [日本語](README_ja.md) / [한국어](README_ko.md) / [繁體中文](README_zh-TW.md)
+[简体中文](README.md) | [English](README_en.md) | [繁體中文](README_zh-TW.md) | [日本語](README_ja.md) | [한국어](README_ko.md)
 
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](package.json)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Express](https://img.shields.io/badge/Express-4.19-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com)
 [![WebSocket](https://img.shields.io/badge/WebSocket-Realtime-010101?style=flat&logo=socketdotio&logoColor=white)](https://github.com/websockets/ws)
-[![MCP](https://img.shields.io/badge/MCP-18_Tools-8A2BE2?style=flat&logo=anthropic&logoColor=white)](https://modelcontextprotocol.io)
+[![MCP](https://img.shields.io/badge/MCP-22_Tools-8A2BE2?style=flat&logo=anthropic&logoColor=white)](https://modelcontextprotocol.io)
+[![Git Sync](https://img.shields.io/badge/Git-Auto_Backup-F05032?style=flat&logo=git&logoColor=white)](#-git-auto-backup--remote-sync)
 [![Obsidian](https://img.shields.io/badge/Obsidian-Plugin-7C3AED?style=flat&logo=obsidian&logoColor=white)](https://obsidian.md)
-[![Database](https://img.shields.io/badge/Database-SQLite%20%7C%20MySQL%20%7C%20Postgres-4479A1?style=flat&logo=sqlite&logoColor=white)](#)
+[![Database](https://img.shields.io/badge/Database-JSON%20%7C%20SQLite%20%7C%20Postgres%20%7C%20MySQL-4479A1?style=flat&logo=sqlite&logoColor=white)](#-multi-database-engine-support--online-migration)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
+[![i18n](https://img.shields.io/badge/i18n-5_Languages-00C49F?style=flat)](#-native-multi-language-support-i18n)
 [![License](https://img.shields.io/badge/License-MIT-F59E0B?style=flat&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
-**Nimbus Vault Sync** is a lightweight, self-hosted, full-featured Obsidian cloud synchronization and knowledge management backend service:
+**Nimbus Vault Sync** is a lightweight, secure, and full-featured private self-hosted Obsidian cloud sync and collaborative knowledge hub. It provides millisecond-level bidirectional real-time synchronization across all platforms (iOS, Android, Mac, Windows, Linux, Web), alongside deep integrations for **22 standard Model Context Protocol (MCP) AI tools**, **native Git auto-backup**, **D3 2D knowledge graph visualization**, **interactive task kanban boards**, **3-way visual conflict resolution**, and **secure note sharing**.
 
-- 📡 **Millisecond-Level WebSocket Real-Time Sync** — Multi-device & multi-vault collaboration with optimistic concurrency control, conflict prevention, and real-time state broadcasting.
-- 🖥 **Modern Web Admin Console** — Multi-vault switcher, full-text fuzzy search, online Markdown editor & preview, device management, and trash bin.
-- 🤖 **Comprehensive Model Context Protocol (MCP)** — 18 standard built-in MCP tools enabling AI clients (Cursor, Cherry Studio, Claude Desktop, Cline, Roo Code) to directly read, write, and organize notes with real-time sync across mobile and desktop.
-- 📖 **Interactive REST API Documentation** — Full OpenAPI Spec with one-click cURL code generation (pre-injected with current JWT & Vault ID).
-- 🔗 **Elegant Public Note Sharing** — Generate web reading links with password protection, expiration days, and anti-copy security.
-- 📱 **Multi-Device Management** — Monitor client platforms, IP addresses, online statuses, dedicated auth tokens, and remote revocation.
-- 🕘 **Version History Snapshots** — Automatic archiving of previous document versions on save, diff inspection, and one-click rollback.
-- 🗑 **Safe Trash Bin Mechanism** — Soft deletions moved to trash bin to prevent accidental data loss, with individual restore and batch purge.
-- 🗄 **Multi-Database Engine Support** — Native support for JSON files, SQLite, PostgreSQL, and MySQL with seamless migration.
-- 🐳 **One-Click Docker Deployment** — Production-ready `Dockerfile` and `docker-compose.yml` with persistent storage volume mounts.
+---
 
-The companion Obsidian plugin is located in the [`obsidian-plugin`](./obsidian-plugin) directory.
+## 🌟 Core Features & Highlights
+
+- ⚡ **Millisecond Real-Time WebSocket Synchronization**
+  - Bidirectional broadcasting across multiple devices and vaults with instant delta updates.
+  - SHA-256 optimistic concurrency locking to prevent multi-device concurrent overwrites.
+- 🤖 **22 Comprehensive Model Context Protocol (MCP) AI Tools**
+  - Native **StreamableHTTP** protocol support for **Cursor, Cherry Studio, Claude Desktop, Cline, Roo Code, VSCode**, and other AI clients.
+  - AI can search notes, read/write/patch documents, log daily thoughts, inspect backlinks & tags, upload attachments, inspect history snapshots, and trigger Git synchronization.
+- 🌿 **Native Git Auto-Backup & Remote Sync**
+  - Connect vaults directly to GitHub, GitLab, Gitee, or self-hosted Git servers.
+  - Debounced auto-commit and push upon file changes, with customizable commit message templates and branch management.
+- 📊 **Interactive Kanban & Markdown Task Scanner**
+  - Vault-level visual task boards with custom swimlanes and drag-and-drop organization.
+  - Instant vault-wide scanning of Markdown task syntax (`- [ ]` / `- [x]`), with one-click toggles and direct navigation to source notes.
+- 🕸️ **D3 Interactive Bi-directional Knowledge Graph**
+  - Dynamic 2D force-directed network graph visualizing document links, orphan notes, degree centrality, and tag clusters.
+- 🔀 **Visual 3-Way Diff & Conflict Resolution**
+  - Preserves `.conflict` backup files during offline collisions to guarantee zero data loss.
+  - Built-in line-level 3-way visual diff & merge editor with one-click resolution policies.
+- 👥 **Fine-Grained RBAC Permissions & Vault Collaboration**
+  - Role-based access control: Owner, Editor (Read-Write), and Viewer (Read-Only).
+  - Dedicated API tokens per user and device, with real-time online status monitoring and remote revocation.
+- 📢 **Multi-Platform Webhook Notifications**
+  - Built-in dispatchers for **Discord, Slack, Feishu / Lark, DingTalk, WeChat Work (WeCom)**, and custom endpoints.
+  - Real-time alerts for file deletions, conflict occurrences, version rollbacks, backups, and device logins.
+- 🔗 **Secure Public Note Sharing**
+  - Publish notes as standalone web reading pages with optional password protection, expiration dates, and anti-copy text selection prevention.
+- 🕘 **Version History Snapshots & Safe Recycle Bin (Trash)**
+  - Automatic snapshot archiving on save with full timeline rollbacks.
+  - Soft-deletion safeguards deleted files in a dedicated trash bin with single-item recovery and automated retention policies.
+- 🗄️ **Multi-Database Engine Support & Online Migration**
+  - Out-of-the-box zero-dependency JSON database, with native support for **SQLite, PostgreSQL, and MySQL**.
+  - One-click non-destructive online migration between database backends in the Web console.
+- 🌍 **Native Multi-Language Support (i18n)**
+  - Native support for **English, 简体中文, 繁體中文, 日本語, 한국어** with instant switching and persistent preferences.
+- 📖 **Interactive REST API Developer Documentation**
+  - Built-in OpenAPI Spec definitions with an interactive web playground that auto-injects active JWT tokens and Vault IDs into ready-to-run cURL commands.
 
 ---
 
@@ -32,204 +61,184 @@ The companion Obsidian plugin is located in the [`obsidian-plugin`](./obsidian-p
 
 ```
 nimbus-vault-sync/
-├── server.js                # Entry point: REST API + WebSocket Hub + MCP endpoint + Static files
-├── obsidian-plugin/         # Companion Obsidian bidirectional sync plugin (.obsidian/plugins/nimbus-sync)
+├── server.js                # Entry point: REST API + WebSocket Hub + MCP endpoint + Static assets
+├── obsidian-plugin/         # Companion Obsidian bidirectional sync plugin
 │   ├── manifest.json
 │   ├── main.js
 │   ├── styles.css
 │   └── README.md
 ├── src/
-│   ├── config.js            # Environment variables & system configuration
-│   ├── db.js                # Multi-database manager (JSON / SQLite / PostgreSQL / MySQL)
-│   ├── users.js             # User accounts & RBAC permissions (Admin / Regular User)
-│   ├── vaults.js            # Vault storage & access verification
-│   ├── auth.js              # JWT authentication & requireAuth / requireAdmin middlewares
-│   ├── storage.js           # Note file I/O, historical snapshots, trash, conflict resolution
-│   ├── mcpServer.js         # 18 Standard MCP tool implementations & StreamableHTTP handler
+│   ├── config.js            # Unified configuration hub (reads versions & variables from package.json/.env)
+│   ├── db.js                # Multi-database manager (JSON / SQLite / PostgreSQL / MySQL) & migration
+│   ├── mcp.js               # 22 Standard MCP tool implementations & StreamableHTTP handler
 │   ├── wsHub.js             # WebSocket real-time multi-client broadcasting hub
-│   └── routes/
-│       ├── authRoutes.js    # Login, registration, system status
-│       ├── vaultRoutes.js   # Vault list, creation, deletion, manifest
-│       ├── fileRoutes.js    # Incremental file read/write, deletion
-│       ├── vaultExtrasRoutes.js # History, trash, conflicts, backups, collaborators, audit logs
-│       ├── shareRoutes.js   # Share links creation & public reader
-│       ├── deviceRoutes.js  # Connected devices list & token management
-│       ├── settingsRoutes.js# Sync settings, password change, DB engine switch
-│       ├── adminRoutes.js   # Superadmin: global vault & user management
-│       ├── mcpRoutes.js     # MCP StreamableHTTP endpoint & /tools introspection
-│       └── docsRoutes.js    # REST API interactive docs & spec endpoints
-├── public/                  # Web Admin Console (Native HTML/CSS/JS, zero-build required)
-│   ├── index.html           # Main management dashboard
-│   ├── share.html           # Elegant public note reading page
-│   ├── style.css            # Modern theme styling system
-│   └── app.js               # Frontend interactive application logic
-└── data/                    # Persistent storage: notes, history snapshots, trash, backups
+│   ├── storage.js           # File I/O, version history snapshots, trash bin, conflict management
+│   ├── gitSync.js           # Native Git auto-commit pipeline & remote repository synchronization
+│   ├── webhooks.js          # Multi-platform webhook dispatcher & alert scheduler
+│   ├── users.js             # User management & RBAC role access
+│   ├── vaults.js            # Vault storage & permission validation
+│   ├── vaultMembers.js      # Multi-user collaboration & permission matrix
+│   ├── devices.js           # Connected devices tracking & token revocation
+│   ├── shares.js            # Encrypted public shares & access control
+│   ├── syncRules.js         # Sync filtering rules (ignored patterns & extensions)
+│   ├── health.js            # Real-time disk, memory, and database health probes
+│   └── routes/              # Modular RESTful API route definitions
+├── public/                  # Modern responsive Web dashboard (pure vanilla JS/CSS, zero build steps)
+│   ├── index.html           # Main SPA management console
+│   ├── share.html           # Public note reader view
+│   ├── style.css            # Responsive theme & style system
+│   ├── app.js               # Frontend application state & UI interactions
+│   └── i18n.js              # Multi-language dictionary (5 languages)
+└── data/                    # Persistent data volume (vaults, configurations, snapshots, trash, backups)
 ```
 
 ---
 
 ## 🚀 Quick Start
 
+### Option 1: Local Run (Node.js / Bun)
+
 ```bash
+# 1. Clone the repository
+git clone https://github.com/your-org/nimbus-vault-sync.git
 cd nimbus-vault-sync
+
+# 2. Install dependencies
 npm install
-cp .env.example .env       # Modify PORT / JWT_SECRET as desired
+
+# 3. Configure environment variables
+cp .env.example .env
+# Edit PORT, JWT_SECRET, etc. as needed
+
+# 4. Start the server
 npm start
 ```
 
-Open your browser and navigate to **`http://localhost:8787/admin`** to access the Web Admin Console.
-
-When starting with an empty database, create the initial administrator account by:
-1. Opening the Web Console in your browser and completing the setup prompt.
-2. Or sending a request to `POST /api/auth/register` (only available when no users exist).
+Open your browser and navigate to **`http://localhost:3000`** to access the Web Admin Console.  
+On the first launch with no existing accounts, the setup wizard will guide you to create the initial Admin account.
 
 ---
 
-## 🐳 Docker Deployment
+### Option 2: Docker & Docker Compose
+
+#### Using Docker Compose (Recommended)
 
 ```bash
-cd nimbus-vault-sync
-cp .env.example .env    # Set JWT_SECRET to a strong random string
+# Prepare environment file
+cp .env.example .env
+
+# Build and start in background
 docker compose up -d --build
 ```
 
-- Data is persisted in the host's `./data` directory (volume mount). Backing up this folder protects all your notes and configuration.
-- Web Admin Console: `http://localhost:8787/admin`
-- WebSocket Sync Endpoint: `ws://localhost:8787/ws`
-- MCP Server Endpoint: `http://localhost:8787/api/mcp`
-- Running with standalone Dockerfile:
-  ```bash
-  docker build -t nimbus-vault-sync .
-  docker run -d -p 8787:8787 \
-    -e JWT_SECRET=your_jwt_secret_string \
-    -v $(pwd)/data:/app/data \
-    --name nimbus-vault-sync nimbus-vault-sync
-  ```
+#### Using Standalone Docker
+
+```bash
+docker build -t nimbus-vault-sync .
+docker run -d -p 3000:3000 \
+  -e JWT_SECRET=your_super_strong_random_secret \
+  -v $(pwd)/data:/app/data \
+  --name nimbus-vault-sync nimbus-vault-sync
+```
+
+- **Web Dashboard**: `http://localhost:3000`
+- **WebSocket Endpoint**: `ws://localhost:3000/ws`
+- **MCP AI Endpoint**: `http://localhost:3000/api/mcp`
+- **Health Check Probe**: `http://localhost:3000/api/health`
 
 ---
 
-## 🤖 Model Context Protocol (MCP) Integration
+## 🔌 Companion Obsidian Plugin Setup
 
-Nimbus natively implements the **StreamableHTTP** MCP transport protocol. AI clients (Cursor, Cherry Studio, Claude Desktop, Cline, Roo Code, etc.) can directly connect via standard HTTP POST without running local sub-processes.
+1. Open your Obsidian Vault, navigate to **Settings -> Community plugins**, and disable Safe mode.
+2. Copy the [`obsidian-plugin`](./obsidian-plugin) folder from this repository into your vault's plugin directory:
+   `.obsidian/plugins/nimbus-sync/`
+3. Reload Obsidian plugins and enable **Nimbus Sync**.
+4. Log into the Nimbus Web Console, navigate to **Settings & Tokens**, and click **"Copy Plugin Configuration"**.
+5. Paste the configuration into the Obsidian plugin settings to initiate real-time bidirectional synchronization.
+
+---
+
+## 🤖 Model Context Protocol (MCP) AI Assistant Setup
+
+Nimbus features native **StreamableHTTP** MCP integration. AI clients connect directly via standard HTTP POST without requiring local sub-processes.
 
 ### 1. Client Configuration (`mcp.json`)
 
-In the Web Console, click **「🤖 AI / MCP Settings」** on the sidebar to select your vault and copy the configuration:
+In the Web Console, click **"🤖 AI / MCP"** on the sidebar to select your vault and copy the configuration snippet:
 
 ```json
 {
   "mcpServers": {
-    "nimbus-fast-note-sync": {
-      "url": "http://<YOUR_SERVER_HOST>/api/mcp",
+    "nimbus-vault-sync": {
+      "url": "http://<YOUR_SERVER_HOST>:3000/api/mcp",
       "type": "http",
       "headers": {
         "Content-Type": "application/json",
         "Authorization": "Bearer <YOUR_JWT_TOKEN>",
-        "X-Default-Vault-Name": "My Knowledge Base"
+        "X-Default-Vault-Name": "My Vault"
       }
     }
   }
 }
 ```
 
-### 2. 18 Built-in Standard MCP Tools
+### 2. Complete 22 MCP Tools Reference
 
-| Category | Tool Name | Parameters & Description | Use Cases |
+| Category | Tool Name | Parameters & Description | Typical Use Cases |
 | :--- | :--- | :--- | :--- |
-| **Vaults & Stats** | `list_vaults` | List all accessible vaults and user permissions | Vault overview |
-| | `get_vault_stats` | `vaultId?`: Stats for Markdown/HTML/attachments, Top 20 tags, and recent edits | Knowledge base health check |
-| **Search & Metadata** | `list_notes` | `folder?`, `extension?`, `sortBy?`, `sortOrder?`, `limit?`, `includeMetadata?` | Filter by folder/time/extension |
-| | `get_note_metadata`| `path`, `vaultId?`: Extract word count, YAML frontmatter, backlinks `[[Link]]`, `#tags`, and outline | Deep structural analysis |
-| **Read & Write** | `read_note` | `path`, `vaultId?`: Read full document text | Read note contents |
-| | `write_note` | `path`, `content`, `baseHash?`, `vaultId?`: Create or update note with history & real-time broadcast | AI note generation / refactoring |
-| | `append_note` | `path`, `content`, `heading?`, `withTimestamp?`: Append at end of note or under a heading | Meeting notes, quick capture |
-| | `prepend_note` | `path`, `content`, `withTimestamp?`: Insert at the top (preserving YAML frontmatter) | Summary insert / pin |
-| | `patch_note` | `path`, `search`, `replace`, `replaceAll?`: Targeted search and replace | Precise partial updates |
-| **Daily Notes** | `get_daily_note` | `date?`, `folder?`, `createIfMissing?`: Retrieve or initialize daily note | Query daily journal |
-| | `append_daily_note`| `content`, `date?`, `folder?`, `heading?`, `withTimestamp?`: Append timestamped daily log | Micro-journaling / task logs |
-| **Search & Tags** | `search_notes` | `query`, `folder?`, `limit?`, `useRegex?`, `caseSensitive?`: Full-text search with line context | Quick knowledge lookup |
-| | `list_tags` | `folder?`, `vaultId?`: Aggregate all Obsidian tags & nested tag frequencies | Tag taxonomy overview |
-| **Organization** | `move_note` | `oldPath`, `newPath`, `overwrite?`: Rename or move note | Vault re-organization |
-| | `delete_note` | `path`, `vaultId?`: Safe soft deletion (moved to trash) with broadcast | Note cleanup |
-| **History & Diff** | `get_note_history` | `path`, `vaultId?`: Query all historical snapshots for a note | Change log audit |
-| | `read_history_version`| `versionId`, `vaultId?`: Retrieve raw content of a specific snapshot | Comparison & rollback |
-| **Sharing** | `create_share_link`| `path`, `title?`, `password?`, `expiresDays?`, `allowCopy?`: Generate public web share link | AI one-click publishing |
+| **Vaults & Stats** | `list_vaults` | Lists all authorized vaults and user access roles | Vault discovery & context switching |
+| | `get_vault_stats` | `vaultId?`: Returns total notes, attachments, Top 20 tags, and recent updates | Knowledge base health check |
+| **Discovery & Meta**| `list_notes` | `folder?`, `extension?`, `sortBy?`, `sortOrder?`, `limit?` | Structured directory traversal |
+| | `get_note_metadata` | `path`, `vaultId?`: Extracts word count, Frontmatter, `[[Links]]`, tags, and TOC | Deep semantic note analysis |
+| **Read/Write/Patch**| `read_note` | `path`, `vaultId?`: Retrieves raw document content | Reading article contents |
+| | `write_note` | `path`, `content`, `baseHash?`, `vaultId?`: Writes/overwrites note with snapshot archiving & real-time broadcast | AI authoring & refactoring |
+| | `append_note` | `path`, `content`, `heading?`, `withTimestamp?`: Appends text to end or specific heading | Meeting notes & logging |
+| | `prepend_note` | `path`, `content`, `withTimestamp?`: Inserts text at top (preserves YAML Frontmatter) | Prepending summaries |
+| | `patch_note` | `path`, `search`, `replace`, `replaceAll?`: Targeted in-place string replacement | Surgical document edits |
+| **Attachments** | `upload_attachment` | `path`, `sourceUrl?`, `base64Data?`, `vaultId?`: Uploads images/media via URL or Base64 | Clipping web images to vault |
+| | `get_attachment_base64` | `path`, `vaultId?`: Retrieves Base64 payload and MIME type of images/media | Multimodal AI vision analysis |
+| **Daily Notes** | `get_daily_note` | `date?`, `folder?`, `createIfMissing?`: Retrieves or initializes daily note | Daily journal lookup |
+| | `append_daily_note`| `content`, `date?`, `folder?`, `heading?`, `withTimestamp?`: Logs timestamped notes | Capturing fleeting thoughts |
+| **Search & Tags** | `search_notes` | `query`, `folder?`, `limit?`, `useRegex?`, `caseSensitive?`: Full-text search with line numbers | Rapid knowledge retrieval |
+| | `list_tags` | `folder?`, `vaultId?`: Aggregates all Obsidian tags and frequencies | Taxonomy & tag cleanup |
+| **File Operations** | `move_note` | `oldPath`, `newPath`, `overwrite?`: Renames or relocates documents | Vault reorganization |
+| | `delete_note` | `path`, `vaultId?`: Soft-deletes note into recycle bin and broadcasts deletion | Safe note pruning |
+| **Version History** | `get_note_history` | `path`, `vaultId?`: Lists historical snapshots of a document | Reviewing revision history |
+| | `read_history_version`| `versionId`, `vaultId?`: Reads exact content of a past snapshot | Snapshot diffing & rollback |
+| **Public Sharing** | `create_share_link` | `path`, `title?`, `password?`, `expiresDays?`, `allowCopy?`: Generates secure web links | Instant one-click publication |
+| **Git Remote Sync** | `get_vault_git_status`| `vaultId?`: Inspects Git branch, uncommitted files, and remote sync state | Monitoring repository status |
+| | `git_sync_vault` | `vaultId?`, `commitMessage?`, `pullFirst?`: Triggers Git auto-commit and push/pull | Automated AI Git backup |
 
 ---
 
-## 📖 REST API Overview
+## 📊 Feature Comparison
 
-Click **「📖 REST API Docs」** on the Web Console sidebar to view interactive cURL examples pre-injected with your current session token and active vault. The machine-readable OpenAPI spec is also served at `GET /api/docs/spec`.
-
-### Core Endpoint Quick Reference
-
-| Category | Method | Path | Description |
-| :--- | :--- | :--- | :--- |
-| **Auth** | `POST` | `/api/auth/login` | Login and acquire JWT Token |
-| | `GET` | `/api/health` | Service health status check |
-| **Vaults** | `GET` | `/api/vaults` | List all accessible vaults |
-| | `POST` | `/api/vaults` | Create a new vault |
-| | `GET` | `/api/vaults/:vaultId/manifest` | Full file manifest & SHA-256 hashes |
-| | `GET` | `/api/vaults/search?q=keyword` | Cross-vault file and content search |
-| **Files** | `GET` | `/api/vaults/:vaultId/files/*` | Read note or binary attachment |
-| | `PUT` | `/api/vaults/:vaultId/files/*` | Write file (supports `X-Base-Hash` conflict check & broadcast) |
-| | `DELETE`| `/api/vaults/:vaultId/files/*` | Delete file (soft delete to trash bin) |
-| **History** | `GET` | `/api/vaults/:vaultId/history?path=...` | List historical versions of a note |
-| | `POST` | `/api/vaults/:vaultId/history/:versionId/restore` | Rollback to a specific snapshot |
-| **Trash** | `GET` | `/api/vaults/:vaultId/trash` | List files in trash bin |
-| | `POST` | `/api/vaults/:vaultId/trash/:trashId/restore` | Restore file from trash bin |
-| **Backups & Conflicts** | `POST` | `/api/vaults/:vaultId/backups` | Create full vault ZIP snapshot |
-| | `GET` | `/api/vaults/:vaultId/export` | Download full vault as ZIP |
-| | `POST` | `/api/vaults/:vaultId/conflicts/resolve` | Submit conflict resolution strategy |
-| **Sharing** | `POST` | `/api/vaults/:vaultId/shares` | Create public share link |
-| | `GET` | `/api/public/shares/:shareId` | Reader endpoint for public article |
-| **MCP** | `GET` | `/api/mcp/tools` | Introspect 18 MCP tools schema & parameter specs |
-| | `POST` | `/api/mcp` | Handle JSON-RPC requests from AI clients |
+| Feature | **Nimbus Vault Sync** | **Obsidian Official Sync** | **fast-note-sync-service (Go)** |
+| :--- | :---: | :---: | :---: |
+| **Self-Hosted & Private** | ✅ **100% Autonomous Control** | ❌ Proprietary Cloud | ✅ Self-Hosted |
+| **Deep MCP AI Integration** | ✅ **22 Comprehensive Tools** | ❌ None | ⚠️ Basic Read/Write |
+| **Native Multi-Language (i18n)** | ✅ **5 Languages Built-in** | ⚠️ Client UI Only | ❌ Single Language |
+| **Native Git Remote Sync** | ✅ **Built-in GitHub/GitLab Auto-Sync**| ❌ None | ❌ None |
+| **Interactive D3 Knowledge Graph** | ✅ **Interactive 2D Force Graph** | ⚠️ Client Desktop Only | ❌ None |
+| **Kanban & Markdown Task Scanner** | ✅ **Interactive Kanban + Task Scan** | ❌ None | ❌ None |
+| **Visual 3-Way Diff & Merge** | ✅ **Built-in Diff & Merge Studio** | ⚠️ Simple Version Picker | ⚠️ Retains Conflict Copy Only |
+| **Multi-Database & Live Migration** | ✅ **JSON / SQLite / PG / MySQL** | ❌ Proprietary Format | ⚠️ SQLite / PG / MySQL |
+| **Secure Public Note Sharing** | ✅ **Password + Expiry + Anti-Copy** | ❌ Paid Add-on (Publish) | ⚠️ Basic Share |
+| **Interactive REST API Docs** | ✅ **Built-in cURL Playground** | ❌ No Public API | ❌ No Interactive Docs |
+| **Multi-Platform Webhooks** | ✅ **Discord/Slack/Feishu/DingTalk/WeCom** | ❌ None | ❌ None |
 
 ---
 
-## 📡 WebSocket Sync Protocol
+## 🔒 Production Security Recommendations
 
-- **Endpoint**: `ws://<host>/ws?token=<jwt>&vaultId=<vaultId>`
-- **Bidirectional Broadcasting**:
-  - Automatically sends an `init` full manifest comparison upon connection.
-  - Broadcasts `change` / `deleted` notifications to other active devices connected to the same vault.
-  - Uses `baseHash` optimistic concurrency checking; automatically produces `.conflict` copies when concurrent conflicts occur.
-
----
-
-## 📊 Comparison with fast-note-sync-service (FNS)
-
-| Feature | Nimbus Vault Sync | FNS (haierkeys) |
-|---|---|---|
-| **Real-time Sync (WebSocket)** | ✅ Millisecond bidirectional broadcast | ✅ |
-| **Web Admin Console** | ✅ Modern SPA (Online edit, search, device audit) | ✅ |
-| **MCP Tools Count & Breadth** | ✅ **18 standard tools** (Daily notes, shares, metadata, snapshots) | ✅ Basic tools |
-| **Interactive REST API Docs** | ✅ **Interactive docs + one-click cURL** (`/api/docs/spec`) | ❌ |
-| **Version History Snapshots** | ✅ Automatic snapshots & one-click rollback | ✅ |
-| **Safe Trash Bin** | ✅ Soft delete, restore & batch purge | ✅ |
-| **Public Note Sharing** | ✅ Password protection, expiry days & reader UI | ✅ |
-| **Device Management & Audit** | ✅ Online status / OS platform / remote revocation | ✅ |
-| **Storage Engines** | ✅ Smooth switching across JSON / SQLite / MySQL / PostgreSQL | ✅ SQLite / MySQL / PostgreSQL |
-| **Extensibility & Customization** | ✅ Pure Node.js, zero build step, easy to customize | Built with Go |
+1. **Strong JWT Secret**: Always update `JWT_SECRET` in `.env` using a cryptographically strong string (`openssl rand -base64 32`).
+2. **Reverse Proxy & HTTPS/WSS**: Deploy behind Nginx, Caddy, or Cloudflare with SSL/TLS enabled, and set `TRUST_PROXY=1` when behind reverse proxies.
+3. **CORS Restrictions**: In production domains, set `CORS_ALLOWED_ORIGINS=https://your-domain.com` to lock down cross-origin API requests.
+4. **Regular Data Backups**: All notes, snapshots, trash items, and database files reside in `./data`. Regularly backup this directory.
 
 ---
 
-## 🔒 Security & Operations Recommendations
+## 📄 License
 
-1. **Strong JWT Secret**: Ensure `JWT_SECRET` in `.env` is set to a long, random string.
-2. **Reverse Proxy & HTTPS**: In production, deploy behind Nginx, Caddy, or Cloudflare with HTTPS/WSS enabled.
-3. **Data Backups**: All notes and database state reside in `./data`. Regularly backing up this folder or triggering "Create Backup" in the Web Console ensures full recovery.
-
----
-
-## 💖 Sponsorship & Support
-
-- If you find this project useful and would like it to continue development, please support us in the following ways. Thank you for supporting open-source software!
-- 如果您觉得本项目对您有所帮助并希望它持续迭代与更新，欢迎通过以下方式赞助支持作者，感谢您对开源软件的认可与鼓励：
-
-| Ko-fi *Non-China Region* | | WeChat Pay *China Region* |
-| :---: | :---: | :---: |
-| <a href="https://ko-fi.com/lengedliu" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" width="220" alt="Support me on Ko-fi" /></a> | or | <img src="./public/wechat-reward.jpg" width="190" alt="WeChat Pay 微信打赏" /> |
-
----
+This project is open-sourced under the [MIT License](LICENSE).
