@@ -1,7 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const { DATA_DIR, JWT_SECRET } = require('./config');
+const { DATA_DIR, JWT_SECRET, VERSION } = require('./config');
 const JsonDb = require('./jsonDb');
 const dbManager = require('./db');
 
@@ -221,7 +221,7 @@ function generatePluginConfig({ serverUrl, vaultId, token, deviceName = 'Obsidia
 
   return {
     plugin: 'fast-note-sync',
-    version: '1.0.0',
+    version: VERSION,
     data: {
       serverUrl: cleanServer,
       wsUrl: `${wsUrl}?vaultId=${vaultId}&token=${token}&deviceId=${encodeURIComponent(deviceName)}`,

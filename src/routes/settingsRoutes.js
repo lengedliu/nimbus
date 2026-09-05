@@ -7,6 +7,7 @@ const sharesStore = require('../shares');
 const syncRulesStore = require('../syncRules');
 const dbManager = require('../db');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { VERSION } = require('../config');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -16,6 +17,7 @@ router.get('/', (req, res) => {
   const currentSettings = settingsManager.getSystemSettings();
   res.json({
     settings: currentSettings,
+    version: VERSION,
     user: {
       id: req.user.id,
       username: req.user.username,

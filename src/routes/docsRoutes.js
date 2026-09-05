@@ -1,4 +1,5 @@
 const express = require('express');
+const { VERSION } = require('../config');
 const router = express.Router();
 
 const API_CATEGORIES = [
@@ -317,7 +318,7 @@ const API_CATEGORIES = [
         body: null,
         response: {
           name: 'nimbus-fast-note-sync',
-          version: '1.2.0',
+          version: VERSION,
           toolsCount: 20,
           tools: [{ name: 'read_note', category: '读取与写入', description: '...' }],
         },
@@ -421,7 +422,7 @@ const API_CATEGORIES = [
 router.get('/spec', (req, res) => {
   res.json({
     title: 'Nimbus Fast Note Sync REST API Documentation',
-    version: '1.2.0',
+    version: VERSION,
     description: '标准 RESTful API 接口规范与开发文档，覆盖认证、笔记库、文件实时增量读写、版本快照、冲突解决、外链分享及 MCP 协议。',
     categories: API_CATEGORIES,
   });

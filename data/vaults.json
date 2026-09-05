@@ -5,6 +5,12 @@
       "ownerId": "a0f9df37-9f58-4298-997b-ffb51ab82dbd",
       "name": "Default",
       "createdAt": "2026-08-30T14:26:35.170Z"
+    },
+    {
+      "id": "e6d9e41c-a21b-446e-ad70-68e3a4c33122",
+      "ownerId": "owner-u1",
+      "name": "Test Arch Vault",
+      "createdAt": "2026-09-05T15:56:21.514Z"
     }
   ]
 }

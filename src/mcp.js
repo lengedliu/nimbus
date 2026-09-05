@@ -9,6 +9,7 @@ const fnsHub = require('./wsHub');
 const gitSync = require('./gitSync');
 const webhooks = require('./webhooks');
 const { isPrivateOrReservedIp } = require('./utils/ssrfGuard');
+const { VERSION } = require('./config');
 
 // upload_attachment 的 sourceUrl 允许下载的最大字节数，防止一个巨大的远程文件把内存吃爆。
 const MAX_ATTACHMENT_BYTES = parseInt(process.env.ATTACHMENT_MAX_MB || '200', 10) * 1024 * 1024;
@@ -161,7 +162,7 @@ function analyzeMarkdown(text) {
  * of one user's session leaking into another's.
  */
 function buildMcpServer(user, defaultVaultId) {
-  const server = new McpServer({ name: 'nimbus-fast-note-sync', version: '1.2.0' });
+  const server = new McpServer({ name: 'nimbus-fast-note-sync', version: VERSION });
 
   function resolveVaultId(vaultId) {
     const input = (vaultId || defaultVaultId || '').trim();

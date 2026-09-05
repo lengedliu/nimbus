@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { DATA_DIR } = require('./config');
+const { DATA_DIR, VERSION } = require('./config');
 const dbManager = require('./db');
 const vaultsStore = require('./vaults');
 
@@ -72,6 +72,7 @@ async function getHealthStatus() {
     ok: isHealthy,
     status: isHealthy ? 'healthy' : 'degraded',
     service: 'nimbus-vault-sync',
+    version: VERSION,
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime()),
     database: {

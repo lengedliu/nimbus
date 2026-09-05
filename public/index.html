@@ -49,6 +49,10 @@
       <span class="brand-name" data-i18n="login.title">Nimbus Vault Sync</span>
     </div>
     <div class="subtitle" data-i18n="login.subtitle">Obsidian 高速实时同步服务 · 管理后台</div>
+    <div class="login-date-display" id="login-date-display" title="当前系统日期">
+      <span class="date-icon">📅</span>
+      <span id="login-date-text" class="date-text"></span>
+    </div>
 
     <label>
       <span data-i18n="login.server_label">服务器地址</span>
@@ -70,12 +74,16 @@
 
 <div id="app-view" class="app hidden">
   <header class="topbar">
-    <div class="brand">
+    <div class="brand" id="brand-logo-btn" style="cursor:pointer;" title="返回看板总览">
       <span class="logo">☁️</span>
       <span class="brand-name">Nimbus Vault Sync</span>
       <span class="brand-badge">Fast Sync</span>
     </div>
     <div class="topbar-center">
+      <div id="topbar-date-display" class="topbar-date-display" data-i18n-title="topbar.date_title" title="当前系统日期">
+        <span class="date-icon">📅</span>
+        <span id="topbar-date-text" class="date-text"></span>
+      </div>
       <button id="topbar-search-btn" class="topbar-search-btn" data-i18n-title="topbar.search_title" title="全局快速检索 (Ctrl+K)">
         <span>🔍</span>
         <span class="search-placeholder" data-i18n="topbar.search_placeholder">全局检索笔记与内容...</span>
@@ -166,6 +174,13 @@
   <div class="layout">
     <nav class="sidebar">
       <div class="sidebar-body">
+        <div style="margin-bottom: 14px;">
+          <button class="nav-item tab-btn" id="global-dashboard-btn" data-tab="dashboard" style="width:100%;font-weight:600;display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:var(--radius);background:var(--accent-bg);color:var(--accent);border:1px solid rgba(88,166,255,0.25);cursor:pointer;">
+            <span style="font-size:16px;">📊</span>
+            <span data-i18n="sidebar.dashboard">📊 看板总览</span>
+          </button>
+        </div>
+
         <div class="sidebar-header">
           <div class="nav-section-title" data-i18n="sidebar.my_vaults">我的 Vaults</div>
           <button id="new-vault-btn" class="btn-icon" data-i18n-title="sidebar.new_vault" title="新建 Vault">+</button>
@@ -185,6 +200,7 @@
         <div id="admin-nav" class="hidden">
           <div class="nav-section-title" style="margin-top:24px" data-i18n="sidebar.admin_section">系统管理</div>
           <ul class="nav-menu">
+            <li><button class="tab-btn" data-tab="dashboard" data-i18n="sidebar.dashboard">📊 看板总览</button></li>
             <li><button class="tab-btn" data-tab="settings" data-i18n="sidebar.settings">⚙️ 设置</button></li>
             <li><button class="tab-btn" data-tab="database" data-i18n="sidebar.database">🗄️ 数据库管理</button></li>
             <li><button class="tab-btn" data-tab="webhooks" data-i18n="sidebar.webhooks">🔔 Webhook 告警</button></li>
@@ -204,7 +220,7 @@
           </svg>
           <span>GitHub</span>
         </a>
-        <div class="sidebar-version-badge" data-i18n-title="sidebar.version" title="当前版本">v1.2.0</div>
+        <div class="sidebar-version-badge" id="sidebar-version-badge" data-i18n-title="sidebar.version" title="当前版本">v1.2.0</div>
       </div>
     </nav>
 

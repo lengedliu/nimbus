@@ -4,6 +4,7 @@ const { requireAuth } = require('../auth');
 const vaultsStore = require('../vaults');
 const { buildMcpServer } = require('../mcp');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { VERSION } = require('../config');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -162,7 +163,7 @@ router.get('/tools', (req, res) => {
 
   res.json({
     name: 'nimbus-fast-note-sync',
-    version: '1.2.0',
+    version: VERSION,
     protocol: 'Model Context Protocol (MCP) Streamable HTTP',
     toolsCount: tools.length,
     tools,

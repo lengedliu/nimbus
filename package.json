@@ -15,7 +15,7 @@
     "build": "echo 'Build complete'",
     "lint": "node -c server.js src/*.js src/*/*.js",
     "check:permissions": "node scripts/check-permission-consistency.js",
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.js\"",
     "verify": "npm run lint && npm run check:permissions && npm test",
     "create-user": "node src/cli/createUser.js"
   },

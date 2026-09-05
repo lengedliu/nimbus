@@ -76,6 +76,7 @@
       'login.err_failed': '登录失败，请检查账号密码或服务器地址',
 
       // 顶栏
+      'topbar.date_title': '当前系统日期与时间',
       'topbar.search_placeholder': '全局检索笔记与内容...',
       'topbar.search_shortcut': 'Ctrl K',
       'topbar.search_title': '全局快速检索 (Ctrl+K)',
@@ -98,6 +99,10 @@
       'theme.light': '明亮白昼 (Light)',
 
       // 侧边栏
+      'sidebar.dashboard': '📊 看板总览',
+      'dashboard.title': 'Nimbus 看板总览',
+      'dashboard.tab_overview': '运行与同步大盘',
+      'dashboard.tab_kanban': '任务便签看板',
       'sidebar.my_vaults': '我的 Vaults',
       'sidebar.new_vault': '新建 Vault',
       'sidebar.quick_tools': '快捷工具',
@@ -357,6 +362,7 @@
       'login.err_failed': '登入失敗，請檢查帳號密碼或伺服器位址',
 
       // 頂欄
+      'topbar.date_title': '目前系統日期與時間',
       'topbar.search_placeholder': '全域檢索筆記與內容...',
       'topbar.search_shortcut': 'Ctrl K',
       'topbar.search_title': '全域快速檢索 (Ctrl+K)',
@@ -379,6 +385,10 @@
       'theme.light': '明亮白晝 (Light)',
 
       // 側邊欄
+      'sidebar.dashboard': '📊 看板總覽',
+      'dashboard.title': 'Nimbus 看板總覽',
+      'dashboard.tab_overview': '運行與同步大盤',
+      'dashboard.tab_kanban': '任務便簽看板',
       'sidebar.my_vaults': '我的 Vaults',
       'sidebar.new_vault': '新建 Vault',
       'sidebar.quick_tools': '快捷工具',
@@ -638,6 +648,7 @@
       'login.err_failed': 'Sign-in failed. Please verify credentials or server URL.',
 
       // Topbar
+      'topbar.date_title': 'Current Date & Time',
       'topbar.search_placeholder': 'Search all notes and contents...',
       'topbar.search_shortcut': 'Ctrl K',
       'topbar.search_title': 'Global Fast Search (Ctrl+K)',
@@ -660,6 +671,10 @@
       'theme.light': 'Bright Daylight (Light)',
 
       // Sidebar
+      'sidebar.dashboard': '📊 Dashboard & Kanban',
+      'dashboard.title': 'Nimbus Dashboard & Kanban',
+      'dashboard.tab_overview': 'Overview & Metrics',
+      'dashboard.tab_kanban': 'Task Kanban Board',
       'sidebar.my_vaults': 'My Vaults',
       'sidebar.new_vault': 'New Vault',
       'sidebar.quick_tools': 'Quick Tools',
@@ -919,6 +934,7 @@
       'login.err_failed': '로그인 실패. 계정 정보 또는 서버 주소를 확인하세요.',
 
       // Topbar
+      'topbar.date_title': '현재 시스템 날짜 및 시간',
       'topbar.search_placeholder': '모든 노트 및 콘텐츠 검색...',
       'topbar.search_shortcut': 'Ctrl K',
       'topbar.search_title': '전역 빠른 검색 (Ctrl+K)',
@@ -941,6 +957,10 @@
       'theme.light': '브라이트 데이라이트 (라이트)',
 
       // Sidebar
+      'sidebar.dashboard': '📊 대시보드 및 칸반',
+      'dashboard.title': 'Nimbus 대시보드 총괄',
+      'dashboard.tab_overview': '동기화 현황 및 메트릭',
+      'dashboard.tab_kanban': '작업 칸반 보드',
       'sidebar.my_vaults': '내 Vault 목록',
       'sidebar.new_vault': '새 Vault 생성',
       'sidebar.quick_tools': '빠른 도구',
@@ -1200,6 +1220,7 @@
       'login.err_failed': 'ログインに失敗しました。認証情報またはサーバーURLをご確認ください。',
 
       // Topbar
+      'topbar.date_title': '現在の日時',
       'topbar.search_placeholder': 'ノートやコンテンツを検索...',
       'topbar.search_shortcut': 'Ctrl K',
       'topbar.search_title': 'グローバルクイック検索 (Ctrl+K)',
@@ -1222,6 +1243,10 @@
       'theme.light': 'ブライトデイライト (Light)',
 
       // Sidebar
+      'sidebar.dashboard': '📊 ダッシュボード・かんばん',
+      'dashboard.title': 'Nimbus ダッシュボード',
+      'dashboard.tab_overview': '同期稼働状況とメトリクス',
+      'dashboard.tab_kanban': 'タスクかんばんボード',
       'sidebar.my_vaults': 'マイ Vaults',
       'sidebar.new_vault': '新規 Vault 作成',
       'sidebar.quick_tools': 'クイックツール',

@@ -1,9 +1,13 @@
 require('dotenv').config();
 const path = require('path');
+const pkg = require('../package.json');
 
+const APP_VERSION = process.env.APP_VERSION || pkg.version || '1.2.0';
 const DATA_DIR = path.resolve(process.cwd(), process.env.DATA_DIR || './data');
 
 module.exports = {
+  VERSION: APP_VERSION,
+  APP_VERSION,
   PORT: parseInt(process.env.PORT || '3000', 10),
   JWT_SECRET: process.env.JWT_SECRET || 'dev-only-insecure-secret',
   TOKEN_TTL: process.env.TOKEN_TTL || '30d',

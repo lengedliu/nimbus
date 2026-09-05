@@ -79,13 +79,17 @@ class FnsHub {
       const vaultId = query.vaultId;
       const vault = vaultId && vaults.getById(vaultId);
 
-      const isAdmin = user && user.role === 'admin';
-      if (!user || !vault || !vaults.hasReadAccess(user.id, vaultId, isAdmin)) {
+      try {
+        if (!user || !vault) throw new Error();
+        const permissions = require('./permissions');
+        permissions.assertReadAccess(user, vaultId);
+      } catch {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
       }
 
+      const isAdmin = user && user.role === 'admin';
       const permission = vaults.getUserPermission(user.id, vaultId, isAdmin);
       const deviceId = payload?.deviceId || payload?.tid || query.deviceId || 'device-' + user.id.slice(0, 6);
       const deviceName = payload?.deviceName || payload?.label || query.deviceName || 'Obsidian Client';

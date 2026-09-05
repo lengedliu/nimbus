@@ -80,12 +80,9 @@ router.get('/:vaultId/search', asyncHandler(async (req, res) => {
 // GET /api/vaults/:vaultId/permissions
 router.get('/:vaultId/permissions', (req, res) => {
   const { vaultId } = req.params;
+  if (!requireReadAccess(req, res)) return;
   const isAdmin = req.user.role === 'admin';
   const vault = vaults.getById(vaultId);
-  if (!vault) return res.status(404).json({ error: 'Vault not found' });
-
-  const myPermission = vaults.getUserPermission(req.user.id, vaultId, isAdmin);
-  if (!myPermission) return res.status(403).json({ error: 'No access to this vault' });
 
   const owner = users.findById(vault.ownerId);
   const rawMembers = vaultMembers.listForVault(vaultId);

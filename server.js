@@ -7,7 +7,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const { PORT, DATA_DIR, VAULTS_DIR, TLS_CERT_PATH, TLS_KEY_PATH, TRUST_PROXY, JWT_SECRET } = require('./src/config');
+const { PORT, DATA_DIR, VAULTS_DIR, TLS_CERT_PATH, TLS_KEY_PATH, TRUST_PROXY, JWT_SECRET, VERSION } = require('./src/config');
 const authRoutes = require('./src/routes/authRoutes');
 const vaultRoutes = require('./src/routes/vaultRoutes');
 const fileRoutes = require('./src/routes/fileRoutes');
@@ -19,6 +19,7 @@ const settingsRoutes = require('./src/routes/settingsRoutes');
 const deviceRoutes = require('./src/routes/deviceRoutes');
 const docsRoutes = require('./src/routes/docsRoutes');
 const sponsorRoutes = require('./src/routes/sponsorRoutes');
+const dashboardRoutes = require('./src/routes/dashboardRoutes');
 const fnsHub = require('./src/wsHub');
 const dbManager = require('./src/db');
 const users = require('./src/users');
@@ -116,7 +117,8 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-app.get('/api/health', (req, res) => res.json({ ok: true, name: 'nimbus-server' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, name: 'nimbus-server', version: VERSION }));
+app.get('/api/version', (req, res) => res.json({ ok: true, name: 'nimbus-server', version: VERSION }));
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api', shareRoutes);
@@ -128,6 +130,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/mcp', mcpRoutes);
 app.use('/api/docs', docsRoutes);
 app.use('/api/sponsors', sponsorRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Public share page
 app.get('/share/:shareId', (req, res) => {
