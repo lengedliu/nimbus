@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { vaultFilesRoot, vaultRoot, listForUser, getById } = require('./vaults');
+const { encryptField, decryptField } = require('./utils/crypto');
 
 /**
  * Git Auto-Backup and Remote Sync Engine for Nimbus Vault Sync
@@ -41,7 +42,11 @@ function loadConfig(vaultId) {
   }
   try {
     const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
-    return { ...DEFAULT_CONFIG, ...raw };
+    const config = { ...DEFAULT_CONFIG, ...raw };
+    if (config.token) {
+      config.token = decryptField(config.token);
+    }
+    return config;
   } catch {
     return { ...DEFAULT_CONFIG };
   }
@@ -51,7 +56,21 @@ function saveConfig(vaultId, config) {
   const p = getGitConfigFile(vaultId);
   const current = loadConfig(vaultId);
   const updated = { ...current, ...config };
-  fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8');
+
+  if (updated.remoteUrl) {
+    updated.remoteUrl = validateRemoteUrl(updated.remoteUrl);
+  }
+  if (updated.branch) {
+    updated.branch = validateBranch(updated.branch);
+  }
+
+  // 敏感凭据落盘加密：写盘前使用 AES-256-GCM 对 token 进行加密存储
+  const diskPayload = { ...updated };
+  if (diskPayload.token) {
+    diskPayload.token = encryptField(diskPayload.token);
+  }
+
+  fs.writeFileSync(p, JSON.stringify(diskPayload, null, 2), 'utf8');
   return updated;
 }
 
@@ -59,6 +78,63 @@ function isGitRepo(vaultId) {
   const repoDir = vaultFilesRoot(vaultId);
   const gitDir = path.join(repoDir, '.git');
   return fs.existsSync(gitDir);
+}
+
+/**
+ * 严格校验并清洗 remoteUrl，彻底阻断协议注入（ext::, file://, ssh://）和参数注入（-oProxyCommand, --upload-pack 等）
+ */
+function validateRemoteUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') {
+    throw new Error('仓库地址不能为空');
+  }
+  const trimmed = urlStr.trim();
+  if (!trimmed) {
+    throw new Error('仓库地址不能为空');
+  }
+  // 严禁以 '-' 开头（防 Argument / Flag Injection）
+  if (trimmed.startsWith('-')) {
+    throw new Error('非法仓库地址：不能以 "-" 开头');
+  }
+  // 严禁换行符或空字符（防命令或响应拆分）
+  if (/[\r\n\0]/.test(trimmed)) {
+    throw new Error('非法仓库地址：包含非法控制字符');
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('仓库地址格式无效，请提供标准 HTTP/HTTPS 协议地址（如 https://github.com/user/repo.git）');
+  }
+
+  // 严格协议白名单：仅允许 https: 和 http:
+  const proto = parsed.protocol.toLowerCase();
+  if (proto !== 'https:' && proto !== 'http:') {
+    throw new Error(`不支持的 Git 协议 "${parsed.protocol}"。出于系统安全保护，仅支持 https:// 或 http:// 协议`);
+  }
+
+  if (!parsed.hostname || parsed.hostname.startsWith('-')) {
+    throw new Error('仓库地址无效：主机名不合法');
+  }
+
+  return trimmed;
+}
+
+/**
+ * 校验分支名称，防止参数注入或路径穿越
+ */
+function validateBranch(branchStr) {
+  if (!branchStr || typeof branchStr !== 'string') return 'main';
+  const trimmed = branchStr.trim();
+  if (!trimmed) return 'main';
+  if (trimmed.startsWith('-')) {
+    throw new Error('分支名称不能以 "-" 开头');
+  }
+  // Git 分支标准合法字符检查，不允许包含 ..、~、^、:、?、*、[、\、@{、空格、换行
+  if (!/^[a-zA-Z0-9_\-\./]+$/.test(trimmed) || trimmed.includes('..') || trimmed.endsWith('.lock') || trimmed.endsWith('/')) {
+    throw new Error('分支名称包含非法字符');
+  }
+  return trimmed;
 }
 
 function execGit(vaultId, args, env = {}) {
@@ -71,6 +147,8 @@ function execGit(vaultId, args, env = {}) {
     const defaultEnv = {
       ...process.env,
       GIT_TERMINAL_PROMPT: '0',
+      GIT_ALLOW_PROTOCOL: 'https:http',
+      GIT_OPTIONAL_LOCKS: '0',
       LANG: 'en_US.UTF-8',
       ...env,
     };
@@ -101,25 +179,18 @@ function formatCommitMessage(template, filesCount) {
 /** Build authenticated remote URL if username/token are provided */
 function buildAuthUrl(remoteUrl, username, token) {
   if (!remoteUrl) return '';
-  const trimmed = remoteUrl.trim();
-  if (!username && !token) return trimmed;
+  const cleanUrl = validateRemoteUrl(remoteUrl);
+  if (!username && !token) return cleanUrl;
 
-  try {
-    const urlObj = new URL(trimmed);
-    if (urlObj.protocol === 'https:' || urlObj.protocol === 'http:') {
-      if (token && username) {
-        urlObj.username = encodeURIComponent(username);
-        urlObj.password = encodeURIComponent(token);
-      } else if (token) {
-        urlObj.username = 'oauth2';
-        urlObj.password = encodeURIComponent(token);
-      }
-      return urlObj.toString();
-    }
-  } catch {
-    // If not standard URL (e.g. ssh), return as-is
+  const urlObj = new URL(cleanUrl);
+  if (token && username) {
+    urlObj.username = encodeURIComponent(username);
+    urlObj.password = encodeURIComponent(token);
+  } else if (token) {
+    urlObj.username = 'oauth2';
+    urlObj.password = encodeURIComponent(token);
   }
-  return trimmed;
+  return urlObj.toString();
 }
 
 /** Mask password/token in URL or text for safe display/logging */
@@ -176,14 +247,15 @@ async function initRepo(vaultId) {
 }
 
 async function updateRemoteUrl(vaultId, config) {
+  if (!config.remoteUrl) return;
   const authUrl = buildAuthUrl(config.remoteUrl, config.username, config.token);
   const remotesRes = await execGit(vaultId, ['remote']);
   const hasOrigin = remotesRes.stdout.split('\n').map((s) => s.trim()).includes('origin');
 
   if (hasOrigin) {
-    await execGit(vaultId, ['remote', 'set-url', 'origin', authUrl]);
+    await execGit(vaultId, ['remote', 'set-url', 'origin', '--', authUrl]);
   } else if (authUrl) {
-    await execGit(vaultId, ['remote', 'add', 'origin', authUrl]);
+    await execGit(vaultId, ['remote', 'add', 'origin', '--', authUrl]);
   }
 }
 
@@ -260,17 +332,47 @@ async function getStatus(vaultId) {
  */
 async function testConnection(vaultId, testParams = {}) {
   const current = loadConfig(vaultId);
-  const remoteUrl = testParams.remoteUrl || current.remoteUrl;
-  const username = testParams.username !== undefined ? testParams.username : current.username;
-  const token = testParams.token !== undefined ? testParams.token : current.token;
-  const branch = testParams.branch || current.branch || 'main';
+  const rawRemoteUrl = testParams.remoteUrl !== undefined ? testParams.remoteUrl : current.remoteUrl;
 
-  if (!remoteUrl) {
+  if (!rawRemoteUrl) {
     return { ok: false, error: '请先填写远端 Git 仓库地址 (URL)' };
   }
 
-  const authUrl = buildAuthUrl(remoteUrl, username, token);
-  const result = await execGit(vaultId, ['ls-remote', '-h', authUrl, branch]);
+  let remoteUrl;
+  try {
+    remoteUrl = validateRemoteUrl(rawRemoteUrl);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+
+  let branch = 'main';
+  try {
+    branch = validateBranch(testParams.branch || current.branch || 'main');
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+
+  const username = testParams.username !== undefined ? testParams.username : current.username;
+
+  // 安全防御：如果用户传入了新的 remoteUrl，且未显式提供 token，
+  // 严禁将库主之前保存的 token 发送给可能未知的第三方 URL（防止凭据窃取）
+  let token = testParams.token;
+  if (token === undefined) {
+    if (!testParams.remoteUrl || testParams.remoteUrl.trim() === (current.remoteUrl || '').trim()) {
+      token = current.token;
+    } else {
+      token = '';
+    }
+  }
+
+  let authUrl;
+  try {
+    authUrl = buildAuthUrl(remoteUrl, username, token);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+
+  const result = await execGit(vaultId, ['ls-remote', '-h', '--', authUrl, branch]);
 
   if (result.success) {
     return {
@@ -296,7 +398,7 @@ async function commitAndPush(vaultId, { customMessage, author } = {}) {
   }
 
   const config = loadConfig(vaultId);
-  const branch = config.branch || 'main';
+  const branch = validateBranch(config.branch || 'main');
 
   // Ensure remote origin is configured
   if (config.remoteUrl) {
@@ -333,13 +435,13 @@ async function commitAndPush(vaultId, { customMessage, author } = {}) {
   if (config.remoteUrl) {
     // Optional pull rebase before pushing
     if (config.pullBeforePush) {
-      const pullRes = await execGit(vaultId, ['pull', '--rebase', 'origin', branch]);
+      const pullRes = await execGit(vaultId, ['pull', '--rebase', 'origin', '--', branch]);
       if (!pullRes.success && !pullRes.stderr.includes('Couldn\'t find remote ref')) {
         // Log warning but try push or return
       }
     }
 
-    const pushRes = await execGit(vaultId, ['push', '-u', 'origin', branch]);
+    const pushRes = await execGit(vaultId, ['push', '-u', 'origin', '--', branch]);
     if (!pushRes.success) {
       const errorMsg = maskSecrets(pushRes.stderr || pushRes.stdout);
       saveConfig(vaultId, {
@@ -400,9 +502,9 @@ async function pull(vaultId) {
   }
 
   await updateRemoteUrl(vaultId, config);
-  const branch = config.branch || 'main';
+  const branch = validateBranch(config.branch || 'main');
 
-  const pullRes = await execGit(vaultId, ['pull', 'origin', branch]);
+  const pullRes = await execGit(vaultId, ['pull', 'origin', '--', branch]);
   if (!pullRes.success) {
     return { ok: false, error: maskSecrets(pullRes.stderr || pullRes.stdout) };
   }
@@ -488,4 +590,8 @@ module.exports = {
   pull,
   getLogs,
   notifyChange,
+  validateRemoteUrl,
+  validateBranch,
+  buildAuthUrl,
+  maskSecrets,
 };

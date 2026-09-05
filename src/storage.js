@@ -22,6 +22,10 @@ const MAX_HISTORY_VERSIONS_PER_PATH = 20;
 /** Prevent path traversal: resolve relPath against root and ensure it stays inside root. */
 function safeJoin(root, relPath) {
   const normalized = path.normalize(relPath).replace(/^(\.\.[/\\])+/, '');
+  const segments = normalized.split(/[/\\]/);
+  if (segments.includes('.git')) {
+    throw new Error('Access to .git directory is forbidden');
+  }
   const full = path.join(root, normalized);
   if (!full.startsWith(path.resolve(root) + path.sep) && full !== path.resolve(root)) {
     throw new Error('Invalid path (outside vault root)');
@@ -650,7 +654,21 @@ function exportVaultZip(vaultId, outputStream) {
   archive.pipe(outputStream);
   const root = vaultFilesRoot(vaultId);
   if (fs.existsSync(root)) {
-    archive.directory(root, false);
+    archive.directory(root, false, (entry) => {
+      if (!entry || !entry.name) return entry;
+      const normalized = entry.name.replace(/\\/g, '/');
+      if (
+        normalized === '.git' ||
+        normalized.startsWith('.git/') ||
+        normalized.includes('/.git/') ||
+        normalized.endsWith('/.git') ||
+        normalized === 'git-config.json' ||
+        normalized.endsWith('/git-config.json')
+      ) {
+        return false;
+      }
+      return entry;
+    });
   }
   return archive.finalize();
 }

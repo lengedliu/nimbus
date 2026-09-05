@@ -14,7 +14,7 @@
     "dev": "node server.js",
     "build": "echo 'Build complete'",
     "lint": "node -c server.js src/*.js src/*/*.js",
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.js\"",
     "create-user": "node src/cli/createUser.js"
   },
   "dependencies": {

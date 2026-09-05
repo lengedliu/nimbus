@@ -15,8 +15,9 @@ module.exports = {
   // files. If either is missing, it falls back to plain HTTP/WS.
   TLS_CERT_PATH: process.env.TLS_CERT_PATH || '',
   TLS_KEY_PATH: process.env.TLS_KEY_PATH || '',
-  // 只有部署在 Nginx/Caddy/Traefik 等反向代理之后时才应该打开——
-  // 打开后 req.ip 会信任 X-Forwarded-For 头，直接裸暴露公网时打开这个反而会
-  // 让恶意客户端伪造该头绕过限流。默认关闭，按需用 TRUST_PROXY=1 显式开启。
-  TRUST_PROXY: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true',
+  // 部署在 Nginx/Caddy/Traefik/Cloud Run 等反向代理之后时启用（默认开启）。
+  // 开启后 req.ip 会信任 X-Forwarded-For 头；若在无前置反代的环境下，可配置 TRUST_PROXY=0 关闭。
+  TRUST_PROXY: process.env.TRUST_PROXY !== '0' && process.env.TRUST_PROXY !== 'false',
+  // 跨域允许的域名白名单，逗号分隔，例如: https://notes.example.com
+  CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || '',
 };

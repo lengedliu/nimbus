@@ -8,6 +8,7 @@ const fnsHub = require('./wsHub');
 const gitSync = require('./gitSync');
 const webhooks = require('./webhooks');
 const { isPrivateOrReservedIp } = require('./utils/ssrfGuard');
+const { resolveVaultForUser } = require('./permissions');
 
 // upload_attachment 的 sourceUrl 允许下载的最大字节数，防止一个巨大的远程文件把内存吃爆。
 const MAX_ATTACHMENT_BYTES = parseInt(process.env.ATTACHMENT_MAX_MB || '200', 10) * 1024 * 1024;
@@ -163,59 +164,15 @@ function buildMcpServer(user, defaultVaultId) {
   const server = new McpServer({ name: 'nimbus-fast-note-sync', version: '1.2.0' });
 
   function resolveVaultId(vaultId) {
-    const input = (vaultId || defaultVaultId || '').trim();
-    if (!input) {
-      throw new Error(
-        'No vault specified. Pass a vaultId (UUID or vault name), set the X-Default-Vault-Name header, or call list_vaults first.'
-      );
-    }
-    const userVaults = vaultsStore.listForUser(user.id, user.role === 'admin');
-    // 1. Match by exact ID
-    let found = userVaults.find((v) => v.id === input);
-    // 2. Match by exact Name
-    if (!found) {
-      found = userVaults.find((v) => v.name === input);
-    }
-    // 3. Match by Case-insensitive Name
-    if (!found) {
-      const lower = input.toLowerCase();
-      found = userVaults.find((v) => (v.name || '').toLowerCase() === lower || (v.id || '').toLowerCase() === lower);
-    }
-
-    if (!found) {
-      throw new Error(
-        `Vault "${input}" not found or unauthorized for this account. Available vaults: ${userVaults.map((v) => `"${v.name}" (${v.id})`).join(', ') || 'none'}`
-      );
-    }
-    return found.id;
+    return resolveVaultForUser(user, vaultId, defaultVaultId, 'read');
   }
 
-  /**
-   * 和 resolveVaultId 一样，但额外要求当前用户对这个 vault 至少有"读写"权限——
-   * 用于所有会修改/删除内容的工具。resolveVaultId 本身只保证"这个用户看得到这个库"，
-   * 只读协作者也会通过那个检查；写类工具必须用这个版本，否则只读协作者就能绕过
-   * Web/REST 接口本来该有的权限限制，直接改别人的笔记。
-   */
   function resolveWritableVaultId(vaultId) {
-    const id = resolveVaultId(vaultId);
-    const isAdmin = user.role === 'admin';
-    if (!vaultsStore.hasWriteAccess(user.id, id, isAdmin)) {
-      throw new Error('You only have read-only access to this vault and cannot make changes to it.');
-    }
-    return id;
+    return resolveVaultForUser(user, vaultId, defaultVaultId, 'write');
   }
 
-  /**
-   * 更严格的版本：要求用户是该 vault 的所有者（不含 admin 豁免），
-   * 和 REST 接口 POST /vaults/:vaultId/shares 的权限要求保持一致——
-   * 创建对外公开的分享链接应该只有库主本人能做，写权限协作者也不行。
-   */
   function resolveOwnedVaultId(vaultId) {
-    const id = resolveVaultId(vaultId);
-    if (!vaultsStore.userOwnsVault(user.id, id)) {
-      throw new Error('Only the vault owner can create a public share link for notes in this vault.');
-    }
-    return id;
+    return resolveVaultForUser(user, vaultId, defaultVaultId, 'owner');
   }
 
   // ------------------------- 1. Vault Management & Stats -------------------------

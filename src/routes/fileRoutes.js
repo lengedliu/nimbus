@@ -7,6 +7,7 @@ const vaults = require('../vaults');
 const storage = require('../storage');
 const syncLogger = require('../syncLogger');
 const webhooks = require('../webhooks');
+const { requireVaultAccess } = require('../permissions');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -15,26 +16,8 @@ router.use(requireAuth);
 // 流式写入之后，这个上限只是"防止无限占用磁盘"的安全阀，不再等价于"这么大都要先进内存"。
 const MAX_UPLOAD_BYTES = parseInt(process.env.MAX_UPLOAD_MB || '500', 10) * 1024 * 1024;
 
-function checkAccess(req, res, requireWrite = false) {
-  const { vaultId } = req.params;
-  const isAdmin = req.user.role === 'admin';
-  if (requireWrite) {
-    if (!vaults.hasWriteAccess(req.user.id, vaultId, isAdmin)) {
-      res.status(403).json({ error: '此笔记库仅支持只读访问，无写入修改权限' });
-      return false;
-    }
-  } else {
-    if (!vaults.hasReadAccess(req.user.id, vaultId, isAdmin)) {
-      res.status(404).json({ error: 'Not found or no access' });
-      return false;
-    }
-  }
-  return true;
-}
-
 // GET file content — 流式下载，不再把整个文件先读进内存。
-router.get('/:vaultId/files/*', (req, res) => {
-  if (!checkAccess(req, res, false)) return;
+router.get('/:vaultId/files/*', requireVaultAccess('read'), (req, res) => {
   let relPath = req.params[0] || '';
   try {
     relPath = decodeURIComponent(relPath);
@@ -73,8 +56,7 @@ router.get('/:vaultId/files/*', (req, res) => {
 
 // PUT (create/update) file content. Body = raw bytes, streamed straight to disk.
 // Headers: X-Mtime (ms since epoch, optional), X-Base-Hash (hash client last knew, optional — used for conflict detection)
-router.put('/:vaultId/files/*', (req, res) => {
-  if (!checkAccess(req, res, true)) return;
+router.put('/:vaultId/files/*', requireVaultAccess('write'), (req, res) => {
   let relPath = req.params[0] || '';
   try {
     relPath = decodeURIComponent(relPath);
@@ -196,8 +178,7 @@ router.put('/:vaultId/files/*', (req, res) => {
 });
 
 // DELETE file
-router.delete('/:vaultId/files/*', (req, res) => {
-  if (!checkAccess(req, res, true)) return;
+router.delete('/:vaultId/files/*', requireVaultAccess('write'), (req, res) => {
   let relPath = req.params[0] || '';
   try {
     relPath = decodeURIComponent(relPath);

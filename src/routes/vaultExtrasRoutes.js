@@ -6,26 +6,10 @@ const syncRules = require('../syncRules');
 const syncLogger = require('../syncLogger');
 const gitSync = require('../gitSync');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { checkAccess } = require('../permissions');
 
 const router = express.Router();
 router.use(requireAuth);
-
-function checkAccess(req, res, requireWrite = false) {
-  const { vaultId } = req.params;
-  const isAdmin = req.user.role === 'admin';
-  if (requireWrite) {
-    if (!vaultsStore.hasWriteAccess(req.user.id, vaultId, isAdmin)) {
-      res.status(403).json({ error: '此笔记库仅具有只读权限，无写入/修改权限' });
-      return false;
-    }
-  } else {
-    if (!vaultsStore.hasReadAccess(req.user.id, vaultId, isAdmin)) {
-      res.status(404).json({ error: 'Not found or no access' });
-      return false;
-    }
-  }
-  return true;
-}
 
 // ------------------------------- history --------------------------------------
 
@@ -291,6 +275,7 @@ router.get('/:vaultId/git/config', (req, res) => {
   const config = gitSync.loadConfig(req.params.vaultId);
   res.json({
     ...config,
+    remoteUrl: gitSync.maskSecrets(config.remoteUrl),
     hasToken: Boolean(config.token),
     token: config.token ? '********' : '',
   });
@@ -308,7 +293,13 @@ router.post('/:vaultId/git/config', async (req, res) => {
     updates.token = current.token;
   }
 
-  const saved = gitSync.saveConfig(vaultId, updates);
+  let saved;
+  try {
+    saved = gitSync.saveConfig(vaultId, updates);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
   if (saved.remoteUrl && gitSync.isGitRepo(vaultId)) {
     try {
       await gitSync.initRepo(vaultId);
@@ -319,6 +310,7 @@ router.post('/:vaultId/git/config', async (req, res) => {
     ok: true,
     config: {
       ...saved,
+      remoteUrl: gitSync.maskSecrets(saved.remoteUrl),
       hasToken: Boolean(saved.token),
       token: saved.token ? '********' : '',
     },
