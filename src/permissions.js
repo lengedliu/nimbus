@@ -1,157 +1,102 @@
 const vaultsStore = require('./vaults');
-const vaultMembers = require('./vaultMembers');
 
 /**
- * 核心权限判定函数（单一真理来源 Single Source of Truth）
- * @param {object} user - 请求上下文用户对象 { id, username, role }
- * @param {string} vaultId - 目标 Vault ID
- * @param {'read' | 'write' | 'owner'} requiredLevel - 访问级别
- * @param {object} options - 控制参数，如 { allowAdmin: true }
- * @returns {{ ok: boolean, vault?: object, permission?: string, error?: string, status?: number }}
+ * 单一权限判定入口。
+ *
+ * 在这次修复之前，REST 路由（好几个文件里各自的 checkAccess/checkOwnerAccess）
+ * 和 MCP 工具（buildMcpServer 内部的 resolveVaultId 系列）是两套完全独立的实现，
+ * 这次审查里发现的好几个漏洞（webhook/数据库越权、MCP 写权限缺失、git RCE 的权限
+ * 部分）本质上都是"同一件事有两份实现，改了一份忘了另一份"。
+ *
+ * 现在 REST 和 MCP 都只从这一个模块里判定"这个用户对这个 vault 有没有权限"，
+ * 以后新增任何入口（第三个客户端、新的自动化脚本……）也应该调用这里，而不是
+ * 重新拼一遍 hasReadAccess/hasWriteAccess/userOwnsVault 的组合逻辑。
  */
-function checkVaultAccess(user, vaultId, requiredLevel = 'read', options = {}) {
-  const allowAdmin = options.allowAdmin !== false;
-  if (!user || !user.id) {
-    return { ok: false, error: 'Unauthorized: missing user context', status: 401 };
+
+class PermissionError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'PermissionError';
+    this.code = code; // 'NOT_FOUND' | 'WRITE_REQUIRED' | 'OWNER_REQUIRED'
   }
+}
 
-  const cleanVaultId = (vaultId || '').trim();
-  if (!cleanVaultId) {
-    return { ok: false, error: 'Vault ID is required', status: 400 };
+function isAdminUser(user) {
+  return Boolean(user) && user.role === 'admin';
+}
+
+/** 用户对这个 vault 连读权限都没有时抛出（对外表现为"不存在"，不暴露 vault 是否存在）。 */
+function assertReadAccess(user, vaultId) {
+  if (!vaultsStore.hasReadAccess(user.id, vaultId, isAdminUser(user))) {
+    throw new PermissionError('NOT_FOUND', 'Vault not found or you do not have access to it.');
   }
+}
 
-  const vault = vaultsStore.getById(cleanVaultId);
-  if (!vault) {
-    return { ok: false, error: 'Vault not found', status: 404 };
+/** 用户只有只读权限（或完全没有权限）时抛出——写/删/移动/上传类操作都应该先过这一关。 */
+function assertWriteAccess(user, vaultId) {
+  if (!vaultsStore.hasWriteAccess(user.id, vaultId, isAdminUser(user))) {
+    throw new PermissionError(
+      'WRITE_REQUIRED',
+      'You only have read-only access to this vault and cannot make changes to it.'
+    );
   }
-
-  // 1. 拥有者 (Owner) 拥有最高控制权限
-  if (vault.ownerId === user.id) {
-    return { ok: true, vault, permission: 'owner' };
-  }
-
-  // 2. 系统管理员 (Admin) 默认具备管理豁免
-  if (allowAdmin && user.role === 'admin') {
-    return { ok: true, vault, permission: 'admin' };
-  }
-
-  // 3. 如果要求必须是 Owner（例如删除整个库、修改成员、生成公共分享等敏感操作）
-  if (requiredLevel === 'owner') {
-    return { ok: false, error: 'Only the vault owner can perform this operation', status: 403 };
-  }
-
-  // 4. 检查协作者成员记录
-  const member = vaultMembers.getMember(cleanVaultId, user.id);
-  if (!member) {
-    // 未授权者统一返回 404，防止探测/枚举其他用户的 Vault 存在性
-    return { ok: false, error: 'Not found or no access to this vault', status: 404 };
-  }
-
-  const perm = member.permission || 'read-write';
-
-  // 5. 读级别检查
-  if (requiredLevel === 'read') {
-    return { ok: true, vault, permission: perm };
-  }
-
-  // 6. 写级别检查
-  if (requiredLevel === 'write') {
-    if (perm === 'read-write') {
-      return { ok: true, vault, permission: 'read-write' };
-    }
-    return { ok: false, error: '此笔记库仅支持只读访问，无写入修改权限', status: 403 };
-  }
-
-  return { ok: false, error: 'Forbidden', status: 403 };
 }
 
 /**
- * Express 统一权限中间件
- * @param {'read' | 'write' | 'owner'} requiredLevel
- * @param {object} options
+ * 用户不是这个 vault 的所有者时抛出（管理员豁免）。
+ * 用于风险明显高于普通编辑的操作：创建对外公开的分享链接、配置/触发 Git 远程同步。
  */
-function requireVaultAccess(requiredLevel = 'read', options = {}) {
-  return (req, res, next) => {
-    const vaultId = req.params.vaultId || req.body?.vaultId || req.query?.vaultId;
-    const result = checkVaultAccess(req.user, vaultId, requiredLevel, options);
-    if (!result.ok) {
-      return res.status(result.status || 403).json({ error: result.error });
-    }
-    req.vault = result.vault;
-    req.vaultPermission = result.permission;
-    next();
-  };
+function assertOwnerAccess(user, vaultId) {
+  if (!isAdminUser(user) && !vaultsStore.userOwnsVault(user.id, vaultId)) {
+    throw new PermissionError(
+      'OWNER_REQUIRED',
+      'This action is restricted to the vault owner (or an admin).'
+    );
+  }
 }
 
-/**
- * 为 MCP 工具统一解析 Vault ID，保证与 REST 接口权限严格一致
- * @param {object} user - 用户对象
- * @param {string} input - 传入的 vaultId 或 vaultName
- * @param {string} defaultVaultId - 可选默认 vault
- * @param {'read' | 'write' | 'owner'} requiredLevel - 所需权限
- * @returns {string} 校验通过的合法 vaultId
- */
-function resolveVaultForUser(user, input, defaultVaultId, requiredLevel = 'read') {
-  const target = (input || defaultVaultId || '').trim();
-  if (!target) {
-    throw new Error(
-      'No vault specified. Pass a vaultId (UUID or vault name), set the X-Default-Vault-Name header, or call list_vaults first.'
-    );
-  }
+// ------------------------- Express 适配层 -------------------------
+// 三个判定函数是框架无关的（MCP 工具直接用上面那几个 assert* 函数），
+// 下面这三个是专给 Express 路由用的薄封装：校验失败时直接把响应发出去、
+// 返回 false，调用方沿用原来 `if (!requireXxxAccess(req, res)) return;` 的写法。
 
-  const isAdmin = user.role === 'admin';
-  const userVaults = vaultsStore.listForUser(user.id, isAdmin);
-
-  // 优先精确匹配 ID
-  let found = userVaults.find((v) => v.id === target);
-  // 其次匹配名称
-  if (!found) {
-    found = userVaults.find((v) => v.name === target);
-  }
-  // 忽略大小写匹配
-  if (!found) {
-    const lower = target.toLowerCase();
-    found = userVaults.find(
-      (v) => (v.name || '').toLowerCase() === lower || (v.id || '').toLowerCase() === lower
-    );
-  }
-
-  if (!found) {
-    throw new Error(
-      `Vault "${target}" not found or unauthorized for this account. Available vaults: ${userVaults.map((v) => `"${v.name}" (${v.id})`).join(', ') || 'none'}`
-    );
-  }
-
-  // 走统一的 checkVaultAccess 进行权限校验
-  const check = checkVaultAccess(user, found.id, requiredLevel, {
-    allowAdmin: requiredLevel !== 'owner',
-  });
-  if (!check.ok) {
-    throw new Error(check.error || 'Permission denied');
-  }
-
-  return found.id;
-}
-
-/**
- * Express 路由请求兼容辅助函数
- * 直接在已有路由 handler 内部调用：if (!checkAccess(req, res, requireWrite)) return;
- */
-function checkAccess(req, res, requireWrite = false) {
-  const vaultId = req.params.vaultId || req.body?.vaultId || req.query?.vaultId;
-  const result = checkVaultAccess(req.user, vaultId, requireWrite ? 'write' : 'read');
-  if (!result.ok) {
-    res.status(result.status || 403).json({ error: result.error });
+function requireReadAccess(req, res, vaultId = req.params.vaultId) {
+  try {
+    assertReadAccess(req.user, vaultId);
+    return true;
+  } catch (err) {
+    res.status(404).json({ error: err.message });
     return false;
   }
-  req.vault = result.vault;
-  req.vaultPermission = result.permission;
-  return true;
+}
+
+function requireWriteAccess(req, res, vaultId = req.params.vaultId) {
+  try {
+    assertWriteAccess(req.user, vaultId);
+    return true;
+  } catch (err) {
+    res.status(403).json({ error: err.message });
+    return false;
+  }
+}
+
+function requireOwnerAccess(req, res, vaultId = req.params.vaultId) {
+  try {
+    assertOwnerAccess(req.user, vaultId);
+    return true;
+  } catch (err) {
+    res.status(403).json({ error: err.message });
+    return false;
+  }
 }
 
 module.exports = {
-  checkVaultAccess,
-  requireVaultAccess,
-  resolveVaultForUser,
-  checkAccess,
+  PermissionError,
+  isAdminUser,
+  assertReadAccess,
+  assertWriteAccess,
+  assertOwnerAccess,
+  requireReadAccess,
+  requireWriteAccess,
+  requireOwnerAccess,
 };

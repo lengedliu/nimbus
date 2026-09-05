@@ -8,6 +8,7 @@ const syncRulesStore = require('../syncRules');
 const settingsManager = require('../settings');
 const syncLogger = require('../syncLogger');
 const dbManager = require('../db');
+const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -39,7 +40,7 @@ router.get('/users', (req, res) => {
   res.json({ users: usersWithVaults });
 });
 
-router.post('/users', async (req, res) => {
+router.post('/users', asyncHandler(async (req, res) => {
   const { username, password, role, vaultAssignments } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (password.length < 6) return res.status(400).json({ error: '密码长度至少需要 6 位' });
@@ -59,9 +60,9 @@ router.post('/users', async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
-});
+}));
 
-router.put('/users/:userId', async (req, res) => {
+router.put('/users/:userId', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { password, role, vaultAssignments } = req.body || {};
   const user = users.findById(userId);
@@ -99,7 +100,7 @@ router.put('/users/:userId', async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
-});
+}));
 
 router.get('/users/:userId/vaults', (req, res) => {
   const { userId } = req.params;
@@ -122,7 +123,7 @@ router.get('/users/:userId/vaults', (req, res) => {
   res.json({ user, vaults: vaultsList });
 });
 
-router.put('/users/:userId/vaults', async (req, res) => {
+router.put('/users/:userId/vaults', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { vaultAssignments } = req.body || {};
   const user = users.findById(userId);
@@ -146,7 +147,7 @@ router.put('/users/:userId/vaults', async (req, res) => {
   }
 
   res.json({ ok: true, memberships: vaultMembers.listForUser(userId) });
-});
+}));
 
 router.delete('/users/:userId', (req, res) => {
   if (req.params.userId === req.user.id) {
@@ -167,7 +168,7 @@ router.get('/vaults', (req, res) => {
 
 // ---------------------- Database Management Endpoints ----------------------
 
-router.get('/database/status', async (req, res) => {
+router.get('/database/status', asyncHandler(async (req, res) => {
   try {
     const status = dbManager.getStatus();
     const stats = {
@@ -179,9 +180,9 @@ router.get('/database/status', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
-router.post('/database/test', async (req, res) => {
+router.post('/database/test', asyncHandler(async (req, res) => {
   const config = req.body || {};
   try {
     const result = await dbManager.testConnection(config);
@@ -189,9 +190,9 @@ router.post('/database/test', async (req, res) => {
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
-});
+}));
 
-router.post('/database/switch', async (req, res) => {
+router.post('/database/switch', asyncHandler(async (req, res) => {
   const config = req.body || {};
   const migrateExisting = Boolean(req.body.migrateExisting);
 
@@ -228,7 +229,7 @@ router.post('/database/switch', async (req, res) => {
     console.error('[DB Switch Error]', err);
     res.status(500).json({ error: `数据库切换失败: ${err.message}` });
   }
-});
+}));
 
 // Admin global sync logs endpoint
 router.get('/sync-logs', (req, res) => {

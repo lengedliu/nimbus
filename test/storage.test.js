@@ -108,3 +108,20 @@ test('deleteFile: 删除后 readFile 应该返回 null，manifest 里也不再�
   const manifest = storage.getManifest(VAULT_ID);
   assert.equal(Object.prototype.hasOwnProperty.call(manifest, 'to-delete.md'), false);
 });
+
+test('safeJoin: 任何路径段是 .git 的请求都应该被拒绝，即使直接指定路径', () => {
+  assert.throws(() => storage.readFile(VAULT_ID, '.git/config'));
+  assert.throws(() => storage.readFile(VAULT_ID, 'sub/.git/config'));
+  assert.throws(() => storage.writeFile(VAULT_ID, '.git/hooks/post-commit', Buffer.from('x')));
+});
+
+test('getManifest: .git 目录不应该出现在 manifest 里', () => {
+  const filesRoot = path.join(process.env.DATA_DIR, 'vaults', VAULT_ID, 'files');
+  const gitDir = path.join(filesRoot, '.git');
+  fs.mkdirSync(gitDir, { recursive: true });
+  fs.writeFileSync(path.join(gitDir, 'config'), '[core]\n\ttoken = super-secret-value\n');
+
+  const manifest = storage.getManifest(VAULT_ID, true); // forceRefresh 触发重新 walk
+  const gitPaths = Object.keys(manifest).filter((p) => p.startsWith('.git/'));
+  assert.deepEqual(gitPaths, [], '.git 目录下的文件不应该出现在 manifest 里');
+});

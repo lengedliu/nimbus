@@ -5,6 +5,7 @@ const vaultMembers = require('../vaultMembers');
 const users = require('../users');
 const storage = require('../storage');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { requireReadAccess, requireOwnerAccess } = require('../permissions');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -21,23 +22,17 @@ router.post('/', (req, res) => {
   res.json({ vault });
 });
 
-router.delete('/:vaultId', async (req, res) => {
+router.delete('/:vaultId', asyncHandler(async (req, res) => {
   const { vaultId } = req.params;
-  const isAdmin = req.user.role === 'admin';
-  if (!isAdmin && !vaults.userOwnsVault(req.user.id, vaultId)) {
-    return res.status(403).json({ error: 'Only vault owner or admin can delete this vault' });
-  }
+  if (!requireOwnerAccess(req, res)) return;
   await vaults.remove(vaultId);
   res.json({ ok: true });
-});
+}));
 
 // Full manifest: path -> {size, mtime, hash}. Used by the client to diff against local state.
 router.get('/:vaultId/manifest', (req, res) => {
   const { vaultId } = req.params;
-  const isAdmin = req.user.role === 'admin';
-  if (!vaults.hasReadAccess(req.user.id, vaultId, isAdmin)) {
-    return res.status(404).json({ error: 'Not found or no read permission' });
-  }
+  if (!requireReadAccess(req, res)) return;
   res.json({ manifest: storage.getManifest(vaultId) });
 });
 
@@ -75,10 +70,7 @@ router.get('/search', asyncHandler(async (req, res) => {
 router.get('/:vaultId/search', asyncHandler(async (req, res) => {
   const { vaultId } = req.params;
   const { q } = req.query;
-  const isAdmin = req.user.role === 'admin';
-  if (!vaults.hasReadAccess(req.user.id, vaultId, isAdmin)) {
-    return res.status(404).json({ error: 'Not found or no read permission' });
-  }
+  if (!requireReadAccess(req, res)) return;
   const results = await storage.searchVault(vaultId, q || '', 50);
   res.json({ results });
 }));
@@ -130,16 +122,13 @@ router.get('/:vaultId/permissions', (req, res) => {
 });
 
 // POST /api/vaults/:vaultId/permissions (add or update member permission)
-router.post('/:vaultId/permissions', async (req, res) => {
+router.post('/:vaultId/permissions', asyncHandler(async (req, res) => {
   const { vaultId } = req.params;
   const { userId, username, permission } = req.body || {};
-  const isAdmin = req.user.role === 'admin';
   const vault = vaults.getById(vaultId);
 
   if (!vault) return res.status(404).json({ error: 'Vault not found' });
-  if (!isAdmin && vault.ownerId !== req.user.id) {
-    return res.status(403).json({ error: '只有 Vault 创建者或管理员可修改成员权限' });
-  }
+  if (!requireOwnerAccess(req, res)) return;
 
   let targetUserId = userId;
   if (!targetUserId && username) {
@@ -170,34 +159,28 @@ router.post('/:vaultId/permissions', async (req, res) => {
       createdAt: member.createdAt,
     },
   });
-});
+}));
 
 // DELETE /api/vaults/:vaultId/permissions/:userId (revoke access)
-router.delete('/:vaultId/permissions/:userId', async (req, res) => {
+router.delete('/:vaultId/permissions/:userId', asyncHandler(async (req, res) => {
   const { vaultId, userId } = req.params;
-  const isAdmin = req.user.role === 'admin';
   const vault = vaults.getById(vaultId);
 
   if (!vault) return res.status(404).json({ error: 'Vault not found' });
-  if (!isAdmin && vault.ownerId !== req.user.id) {
-    return res.status(403).json({ error: '只有 Vault 创建者或管理员可移除权限' });
-  }
+  if (!requireOwnerAccess(req, res)) return;
 
   await vaultMembers.removeMember(vaultId, userId);
   res.json({ ok: true });
-});
+}));
 
 // POST /api/vaults/:vaultId/history/cleanup (Trigger retention cleanup)
 router.post('/:vaultId/history/cleanup', (req, res) => {
   const { vaultId } = req.params;
   const { maxDays, maxVersions } = req.body || {};
-  const isAdmin = req.user.role === 'admin';
   const vault = vaults.getById(vaultId);
 
   if (!vault) return res.status(404).json({ error: 'Vault not found' });
-  if (!isAdmin && vault.ownerId !== req.user.id) {
-    return res.status(403).json({ error: '只有 Vault 创建者或管理员可清理历史版本' });
-  }
+  if (!requireOwnerAccess(req, res)) return;
 
   const result = storage.cleanupOldHistoryVersions(
     vaultId,

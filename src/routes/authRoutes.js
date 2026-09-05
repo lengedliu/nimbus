@@ -12,7 +12,7 @@ const MIN_PASSWORD_LENGTH = 6;
 const loginAttempts = new Map(); // ip -> { count, firstAttempt }
 
 function rateLimitLogin(req, res, next) {
-  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
   const now = Date.now();
   const windowMs = 60 * 1000; // 1 minute
   const maxAttempts = 15; // 15 attempts per minute per IP

@@ -3,6 +3,7 @@ const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/ser
 const { requireAuth } = require('../auth');
 const vaultsStore = require('../vaults');
 const { buildMcpServer } = require('../mcp');
+const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -173,7 +174,7 @@ router.get('/tools', (req, res) => {
 // transport per request, so there's no server-side session to manage or
 // leak between users. This is fully spec-compliant and is what most current
 // MCP clients (Claude Code, Cursor, Cherry Studio's HTTP mode, etc.) expect.
-router.post('/', async (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   try {
     const defaultVaultId = resolveDefaultVaultId(req);
     const server = buildMcpServer(req.user, defaultVaultId);
@@ -189,7 +190,7 @@ router.post('/', async (req, res) => {
       res.status(500).json({ error: e.message });
     }
   }
-});
+}));
 
 // No persistent session in stateless mode, so there's nothing to stream on
 // GET or terminate on DELETE — reply politely instead of a bare 404.

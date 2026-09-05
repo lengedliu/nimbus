@@ -3,11 +3,10 @@ const fs = require('fs');
 const { pipeline, Transform } = require('stream');
 const crypto = require('crypto');
 const { requireAuth } = require('../auth');
-const vaults = require('../vaults');
 const storage = require('../storage');
 const syncLogger = require('../syncLogger');
 const webhooks = require('../webhooks');
-const { requireVaultAccess } = require('../permissions');
+const { requireReadAccess, requireWriteAccess } = require('../permissions');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -17,7 +16,8 @@ router.use(requireAuth);
 const MAX_UPLOAD_BYTES = parseInt(process.env.MAX_UPLOAD_MB || '500', 10) * 1024 * 1024;
 
 // GET file content — 流式下载，不再把整个文件先读进内存。
-router.get('/:vaultId/files/*', requireVaultAccess('read'), (req, res) => {
+router.get('/:vaultId/files/*', (req, res) => {
+  if (!requireReadAccess(req, res)) return;
   let relPath = req.params[0] || '';
   try {
     relPath = decodeURIComponent(relPath);
@@ -56,7 +56,8 @@ router.get('/:vaultId/files/*', requireVaultAccess('read'), (req, res) => {
 
 // PUT (create/update) file content. Body = raw bytes, streamed straight to disk.
 // Headers: X-Mtime (ms since epoch, optional), X-Base-Hash (hash client last knew, optional — used for conflict detection)
-router.put('/:vaultId/files/*', requireVaultAccess('write'), (req, res) => {
+router.put('/:vaultId/files/*', (req, res) => {
+  if (!requireWriteAccess(req, res)) return;
   let relPath = req.params[0] || '';
   try {
     relPath = decodeURIComponent(relPath);
@@ -178,7 +179,8 @@ router.put('/:vaultId/files/*', requireVaultAccess('write'), (req, res) => {
 });
 
 // DELETE file
-router.delete('/:vaultId/files/*', requireVaultAccess('write'), (req, res) => {
+router.delete('/:vaultId/files/*', (req, res) => {
+  if (!requireWriteAccess(req, res)) return;
   let relPath = req.params[0] || '';
   try {
     relPath = decodeURIComponent(relPath);

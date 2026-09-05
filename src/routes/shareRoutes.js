@@ -1,20 +1,33 @@
 const express = require('express');
 const path = require('path');
 const { requireAuth } = require('../auth');
-const vaultsStore = require('../vaults');
 const storage = require('../storage');
 const shares = require('../shares');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { assertOwnerAccess } = require('../permissions');
 
 const router = express.Router();
+
+/**
+ * 分享管理接口对"不是所有者"统一返回 404 而不是 403——不想让陌生人通过状态码
+ * 区分出"这个 vault 存在但不是我的"和"这个 vault 根本不存在"。判定本身还是复用
+ * permissions.js 里那份唯一的所有权逻辑，只是这里自己决定怎么把结果映射成响应。
+ */
+function requireOwnerOr404(req, res) {
+  try {
+    assertOwnerAccess(req.user, req.params.vaultId);
+    return true;
+  } catch {
+    res.status(404).json({ error: 'Not found' });
+    return false;
+  }
+}
 
 // --------------------------- Authenticated API ---------------------------
 
 router.get('/vaults/:vaultId/shares', requireAuth, (req, res) => {
   const { vaultId } = req.params;
-  if (!vaultsStore.userOwnsVault(req.user.id, vaultId)) {
-    return res.status(404).json({ error: 'Not found' });
-  }
+  if (!requireOwnerOr404(req, res)) return;
   const list = shares.listForVault(vaultId).map((s) => ({
     id: s.id,
     vaultId: s.vaultId,
@@ -31,9 +44,7 @@ router.get('/vaults/:vaultId/shares', requireAuth, (req, res) => {
 
 router.post('/vaults/:vaultId/shares', requireAuth, asyncHandler(async (req, res) => {
   const { vaultId } = req.params;
-  if (!vaultsStore.userOwnsVault(req.user.id, vaultId)) {
-    return res.status(404).json({ error: 'Not found' });
-  }
+  if (!requireOwnerOr404(req, res)) return;
   const { filePath, title, password, expiresDays, allowCopy } = req.body || {};
   if (!filePath) return res.status(400).json({ error: 'filePath is required' });
 
@@ -56,9 +67,7 @@ router.post('/vaults/:vaultId/shares', requireAuth, asyncHandler(async (req, res
 
 router.delete('/vaults/:vaultId/shares/:shareId', requireAuth, (req, res) => {
   const { vaultId, shareId } = req.params;
-  if (!vaultsStore.userOwnsVault(req.user.id, vaultId)) {
-    return res.status(404).json({ error: 'Not found' });
-  }
+  if (!requireOwnerOr404(req, res)) return;
   const ok = shares.remove(shareId, req.user.id);
   res.json({ deleted: ok });
 });

@@ -22,9 +22,13 @@ const MAX_HISTORY_VERSIONS_PER_PATH = 20;
 /** Prevent path traversal: resolve relPath against root and ensure it stays inside root. */
 function safeJoin(root, relPath) {
   const normalized = path.normalize(relPath).replace(/^(\.\.[/\\])+/, '');
+  // 双重保险：就算 walk() 不会把 .git 列进 manifest，也要挡住"直接按路径请求
+  // .git/config"这种绕过枚举、凭直觉/猜测硬点路径的访问方式——REST 的
+  // GET/PUT/DELETE .../files/.git/xxx 和 MCP 的 read_note/write_note 等
+  // 工具最终都会走到这里，一处拦截，处处生效。
   const segments = normalized.split(/[/\\]/);
-  if (segments.includes('.git')) {
-    throw new Error('Access to .git directory is forbidden');
+  if (segments.some((seg) => seg === '.git')) {
+    throw new Error('Access to the .git directory is not allowed.');
   }
   const full = path.join(root, normalized);
   if (!full.startsWith(path.resolve(root) + path.sep) && full !== path.resolve(root)) {
@@ -105,6 +109,9 @@ function saveCache(vaultId, cache) {
 function walk(dir, base, out = []) {
   if (!fs.existsSync(dir)) return out;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    // .git 是 Git 仓库自己的内部数据（可能包含写入了凭据的 .git/config），
+    // 不是用户的笔记内容，绝不能把它当成普通 vault 文件列出来。
+    if (entry.isDirectory() && entry.name === '.git') continue;
     const full = path.join(dir, entry.name);
     const rel = path.relative(base, full).split(path.sep).join('/');
     if (entry.isDirectory()) {
@@ -654,21 +661,7 @@ function exportVaultZip(vaultId, outputStream) {
   archive.pipe(outputStream);
   const root = vaultFilesRoot(vaultId);
   if (fs.existsSync(root)) {
-    archive.directory(root, false, (entry) => {
-      if (!entry || !entry.name) return entry;
-      const normalized = entry.name.replace(/\\/g, '/');
-      if (
-        normalized === '.git' ||
-        normalized.startsWith('.git/') ||
-        normalized.includes('/.git/') ||
-        normalized.endsWith('/.git') ||
-        normalized === 'git-config.json' ||
-        normalized.endsWith('/git-config.json')
-      ) {
-        return false;
-      }
-      return entry;
-    });
+    archive.directory(root, false);
   }
   return archive.finalize();
 }

@@ -30,7 +30,6 @@ const syncLogger = require('./src/syncLogger');
 const vaultMembers = require('./src/vaultMembers');
 const devicesStore = require('./src/devices');
 const storage = require('./src/storage');
-const { getHealthStatus } = require('./src/health');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(VAULTS_DIR, { recursive: true });
@@ -114,15 +113,10 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: '请求过于频繁，请稍后再试' },
-  validate: { xForwardedForHeader: false },
 });
 app.use('/api', apiLimiter);
 
-app.get('/api/health', async (req, res) => {
-  const health = await getHealthStatus();
-  const statusCode = health.ok ? 200 : 503;
-  res.status(statusCode).json(health);
-});
+app.get('/api/health', (req, res) => res.json({ ok: true, name: 'nimbus-server' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api', shareRoutes);

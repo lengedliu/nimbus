@@ -3,12 +3,12 @@ const dns = require('node:dns').promises;
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const storage = require('./storage');
 const vaultsStore = require('./vaults');
+const permissions = require('./permissions');
 const sharesStore = require('./shares');
 const fnsHub = require('./wsHub');
 const gitSync = require('./gitSync');
 const webhooks = require('./webhooks');
 const { isPrivateOrReservedIp } = require('./utils/ssrfGuard');
-const { resolveVaultForUser } = require('./permissions');
 
 // upload_attachment 的 sourceUrl 允许下载的最大字节数，防止一个巨大的远程文件把内存吃爆。
 const MAX_ATTACHMENT_BYTES = parseInt(process.env.ATTACHMENT_MAX_MB || '200', 10) * 1024 * 1024;
@@ -164,15 +164,63 @@ function buildMcpServer(user, defaultVaultId) {
   const server = new McpServer({ name: 'nimbus-fast-note-sync', version: '1.2.0' });
 
   function resolveVaultId(vaultId) {
-    return resolveVaultForUser(user, vaultId, defaultVaultId, 'read');
+    const input = (vaultId || defaultVaultId || '').trim();
+    if (!input) {
+      throw new Error(
+        'No vault specified. Pass a vaultId (UUID or vault name), set the X-Default-Vault-Name header, or call list_vaults first.'
+      );
+    }
+    const userVaults = vaultsStore.listForUser(user.id, user.role === 'admin');
+    // 1. Match by exact ID
+    let found = userVaults.find((v) => v.id === input);
+    // 2. Match by exact Name
+    if (!found) {
+      found = userVaults.find((v) => v.name === input);
+    }
+    // 3. Match by Case-insensitive Name
+    if (!found) {
+      const lower = input.toLowerCase();
+      found = userVaults.find((v) => (v.name || '').toLowerCase() === lower || (v.id || '').toLowerCase() === lower);
+    }
+
+    if (!found) {
+      throw new Error(
+        `Vault "${input}" not found or unauthorized for this account. Available vaults: ${userVaults.map((v) => `"${v.name}" (${v.id})`).join(', ') || 'none'}`
+      );
+    }
+    return found.id;
   }
 
+  /**
+   * 和 resolveVaultId 一样，但额外要求当前用户对这个 vault 至少有"读写"权限——
+   * 用于所有会修改/删除内容的工具。resolveVaultId 本身只保证"这个用户看得到这个库"，
+   * 只读协作者也会通过那个检查；写类工具必须用这个版本，否则只读协作者就能绕过
+   * Web/REST 接口本来该有的权限限制，直接改别人的笔记。
+   */
+  /**
+   * 和 resolveVaultId 一样，但额外要求当前用户对这个 vault 至少有"读写"权限——
+   * 用于所有会修改/删除内容的工具。resolveVaultId 本身只保证"这个用户看得到这个库"，
+   * 只读协作者也会通过那个检查；写类工具必须用这个版本，否则只读协作者就能绕过
+   * Web/REST 接口本来该有的权限限制，直接改别人的笔记。
+   *
+   * 实际的判定逻辑来自 src/permissions.js 的 assertWriteAccess——REST 路由和这里
+   * 调用的是同一个函数，不是两份独立实现，避免以后改一处忘了另一处。
+   */
   function resolveWritableVaultId(vaultId) {
-    return resolveVaultForUser(user, vaultId, defaultVaultId, 'write');
+    const id = resolveVaultId(vaultId);
+    permissions.assertWriteAccess(user, id);
+    return id;
   }
 
+  /**
+   * 更严格的版本：要求用户是该 vault 的所有者（管理员豁免，和应用里其他"所有者级"
+   * 操作的豁免规则一致），用于创建对外公开的分享链接、配置/触发 Git 远程同步这类
+   * 风险明显高于普通编辑的操作。同样复用 src/permissions.js 的 assertOwnerAccess。
+   */
   function resolveOwnedVaultId(vaultId) {
-    return resolveVaultForUser(user, vaultId, defaultVaultId, 'owner');
+    const id = resolveVaultId(vaultId);
+    permissions.assertOwnerAccess(user, id);
+    return id;
   }
 
   // ------------------------- 1. Vault Management & Stats -------------------------
@@ -1068,16 +1116,15 @@ function buildMcpServer(user, defaultVaultId) {
       commitMessage: z.string().optional().describe('Optional custom commit message.'),
     },
     async ({ vaultId, action = 'commit_and_push', commitMessage }) => {
+      // Git 相关操作风险高于普通读写（设置/使用远程仓库凭据、触发子进程），
+      // 统一要求库所有者权限，和 REST 接口 POST /:vaultId/git/* 保持一致，
+      // 即便是 test_connection 也一样——不额外为它开一个较低的门槛。
+      const id = resolveOwnedVaultId(vaultId);
+
       if (action === 'test_connection') {
-        // 只是测试远程连通性，不改动任何内容，只读协作者也可以用。
-        const id = resolveVaultId(vaultId);
         const testRes = await gitSync.testConnection(id);
         return jsonResult(testRes);
       }
-
-      // pull 会把远程内容合并进本地文件，commit_and_push 会推送并可能改变仓库远程状态——
-      // 这两个动作本质上都是"写"，只读协作者不应该能触发。
-      const id = resolveWritableVaultId(vaultId);
 
       if (action === 'pull') {
         const pullRes = await gitSync.pull(id);

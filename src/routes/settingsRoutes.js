@@ -114,7 +114,7 @@ router.get('/database', (req, res) => {
 // POST /api/settings/database/test - test connection to target database
 // 会真的拿请求体里的 host/port/user/password 去发起数据库连接——
 // 不限权的话，任何登录用户都能把这当成内网端口探测工具，必须管理员专用。
-router.post('/database/test', async (req, res) => {
+router.post('/database/test', asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: '只有管理员有权限测试数据库连接' });
   }
@@ -128,10 +128,10 @@ router.post('/database/test', async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
-});
+}));
 
 // POST /api/settings/database/switch - switch and update active database engine (with optional auto-migration)
-router.post('/database/switch', async (req, res) => {
+router.post('/database/switch', asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: '只有管理员有权限切换与更新数据库配置' });
   }
@@ -176,7 +176,7 @@ router.post('/database/switch', async (req, res) => {
     } catch {}
     res.status(500).json({ error: `数据库引擎切换失败: ${err.message}` });
   }
-});
+}));
 
 // --------------------------- Device / API Tokens ---------------------------
 const jwt = require('jsonwebtoken');
@@ -366,7 +366,7 @@ router.post('/webhooks', handleSaveWebhooks);
 // 注意：testWebhook() 会把请求体里的 url/platform/secret 原样拿去发起真实 HTTP 请求，
 // 并把目标服务器的响应内容透传回调用者——如果不限管理员，等于给了任何登录用户一个
 // "让服务器帮你请求任意内网地址、还能看到响应内容"的 SSRF 探测工具，必须严格限权。
-router.post('/webhooks/test', async (req, res) => {
+router.post('/webhooks/test', asyncHandler(async (req, res) => {
   if (!requireAdminInline(req, res)) return;
   try {
     const result = await webhooks.testWebhook(req.body);
@@ -374,7 +374,7 @@ router.post('/webhooks/test', async (req, res) => {
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
-});
+}));
 
 // ----------------------- Plugin Config Generation -----------------------
 
